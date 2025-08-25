@@ -1,3 +1,6 @@
+// Add global.File polyfill for undici compatibility
+global.File = class File {}
+
 require('dotenv').config();
 
 const express = require('express');
@@ -71,7 +74,7 @@ app.use((err, req, res, next) => {
   res.status(status).json({ error: message });
 });
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5050;
 const MONGODB_URI =
   process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/skillforge';
 

@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
+const mongoose = require('mongoose');
 
 const User = require('../models/User');
 const UserProfile = require('../models/UserProfile');
@@ -38,9 +39,10 @@ router.post(
 
       const user = await User.create({ name, email, passwordHash });
 
-      // Create a corresponding UserProfile entry
+      // Create a corresponding UserProfile entry with sessionId
       await UserProfile.create({
         userId: user._id,
+        sessionId: new mongoose.Types.ObjectId().toString(),
         fullName: name, // Initialize with name from signup
         email: email, // Initialize with email from signup
       });

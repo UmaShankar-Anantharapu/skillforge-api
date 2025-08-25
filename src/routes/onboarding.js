@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const { body, validationResult } = require('express-validator');
 const requireAuth = require('../middleware/requireAuth');
 const UserProfile = require('../models/UserProfile');
@@ -61,14 +62,33 @@ router.post(
   async (req, res, next) => {
     try {
       const userId = req.userId;
+      const { sessionId } = req.body;
+      
+      // Find existing profile or create new one
+      let profile = await UserProfile.findOne({ userId });
+      
+      if (profile) {
+        // Update existing profile
+        profile.onboardingStep = 1;
+        if (sessionId) {
+          profile.sessionId = sessionId;
+        }
+        await profile.save();
+      } else {
+        // Create new profile if none exists
+        const currentSessionId = sessionId || new mongoose.Types.ObjectId().toString();
+        profile = await UserProfile.create({
+          userId,
+          sessionId: currentSessionId,
+          onboardingStep: 1
+        });
+      }
 
-      const profile = await UserProfile.findOneAndUpdate(
-        { userId },
-        { onboardingStep: 1 },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
-      );
-
-      return res.status(200).json({ message: 'Onboarding started successfully', profile });
+      return res.status(200).json({ 
+        message: 'Onboarding started successfully', 
+        profile,
+        sessionId: profile.sessionId
+      });
     } catch (err) {
       return next(err);
     }
@@ -82,13 +102,17 @@ router.post(
   async (req, res, next) => {
     try {
       const userId = req.userId;
+      const { sessionId } = req.body;
+      
+      // Generate or use provided sessionId
+      const finalSessionId = sessionId || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
       // Generate draft onboarding data
       const draftData = await generateDraftOnboardingData();
       
       // Update user profile to step 1
       const profile = await UserProfile.findOneAndUpdate(
-        { userId },
+        { userId, sessionId: finalSessionId },
         { onboardingStep: 1 },
         { upsert: true, new: true, setDefaultsOnInsert: true }
       );
@@ -96,7 +120,8 @@ router.post(
       return res.status(200).json({ 
         message: 'Onboarding started with draft data', 
         profile,
-        draftData
+        draftData,
+        sessionId: finalSessionId
       });
     } catch (err) {
       return next(err);
@@ -109,6 +134,7 @@ router.post(
   '/step/1',
   requireAuth,
   [
+    body('sessionId').isString().trim().notEmpty().withMessage('Session ID is required'),
     body('fullName').isString().trim().notEmpty().withMessage('Full name is required'),
     body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
     body('phoneNumber').optional().isString().trim(),
@@ -125,11 +151,11 @@ router.post(
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const { fullName, email, phoneNumber, jobTitle, company, industry, yearsExperience, preferredLanguage } = req.body;
+      const { sessionId, fullName, email, phoneNumber, jobTitle, company, industry, yearsExperience, preferredLanguage } = req.body;
       const userId = req.userId;
 
       const profile = await UserProfile.findOneAndUpdate(
-        { userId },
+        { userId, sessionId },
         { 
           fullName, 
           email, 
@@ -144,7 +170,7 @@ router.post(
         { upsert: true, new: true, setDefaultsOnInsert: true }
       );
 
-      return res.status(200).json({ message: 'Basic profile saved successfully', profile });
+      return res.status(200).json({ message: 'Basic profile saved successfully', profile, sessionId });
     } catch (err) {
       return next(err);
     }
@@ -156,6 +182,7 @@ router.post(
   '/step/2',
   requireAuth,
   [
+    body('sessionId').isString().trim().notEmpty().withMessage('Session ID is required'),
     body('primaryLearningGoal').isIn(['Career advancement', 'Skill enhancement', 'Career change', 'Interview prep', 'Personal interest']).withMessage('Valid primary learning goal is required'),
     body('targetRole').optional().isString().trim(),
     body('learningTimeline').isIn(['1 month', '3 months', '6 months', '1 year', 'No deadline']).withMessage('Valid learning timeline is required'),
@@ -169,11 +196,11 @@ router.post(
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const { primaryLearningGoal, targetRole, learningTimeline, motivationLevel, currentChallenge } = req.body;
+      const { sessionId, primaryLearningGoal, targetRole, learningTimeline, motivationLevel, currentChallenge } = req.body;
       const userId = req.userId;
 
       const profile = await UserProfile.findOneAndUpdate(
-        { userId },
+        { userId, sessionId },
         { 
           primaryLearningGoal, 
           targetRole, 
@@ -185,7 +212,7 @@ router.post(
         { upsert: true, new: true, setDefaultsOnInsert: true }
       );
 
-      return res.status(200).json({ message: 'Learning goals saved successfully', profile });
+      return res.status(200).json({ message: 'Learning goals saved successfully', profile, sessionId });
     } catch (err) {
       return next(err);
     }
@@ -197,6 +224,7 @@ router.post(
   '/step/3',
   requireAuth,
   [
+    body('sessionId').isString().trim().notEmpty().withMessage('Session ID is required'),
     body('learningStyle').isIn(['Visual', 'Auditory', 'Hands-on/Kinesthetic', 'Reading/Text']).withMessage('Valid learning style is required'),
     body('contentFormat').isIn(['Video tutorials', 'Interactive exercises', 'Text articles', 'Combination']).withMessage('Valid content format is required'),
     body('sessionDuration').isIn(['5-15 min', '15-30 min', '30-60 min', '60+ min']).withMessage('Valid session duration is required'),
@@ -210,11 +238,11 @@ router.post(
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const { learningStyle, contentFormat, sessionDuration, learningDifficulty, preferredDevice } = req.body;
+      const { sessionId, learningStyle, contentFormat, sessionDuration, learningDifficulty, preferredDevice } = req.body;
       const userId = req.userId;
 
       const profile = await UserProfile.findOneAndUpdate(
-        { userId },
+        { userId, sessionId },
         { 
           learningStyle, 
           contentFormat, 
@@ -226,7 +254,7 @@ router.post(
         { upsert: true, new: true, setDefaultsOnInsert: true }
       );
 
-      return res.status(200).json({ message: 'Learning preferences saved successfully', profile });
+      return res.status(200).json({ message: 'Learning preferences saved successfully', profile, sessionId });
     } catch (err) {
       return next(err);
     }
@@ -238,6 +266,7 @@ router.post(
   '/step/4',
   requireAuth,
   [
+    body('sessionId').isString().trim().notEmpty().withMessage('Session ID is required'),
     body('dailyTime').isIn(['15-30 min', '30-60 min', '1-2 hours', '2+ hours']).withMessage('Valid daily time is required'),
     body('bestLearningTimes').isArray({ min: 1 }).withMessage('At least one best learning time is required'),
     body('bestLearningTimes.*').isIn(['Morning', 'Afternoon', 'Evening', 'Late night']).withMessage('Valid best learning times are required'),
@@ -252,11 +281,11 @@ router.post(
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const { dailyTime, bestLearningTimes, daysPerWeek, timeZone, reminderMethod } = req.body;
+      const { sessionId, dailyTime, bestLearningTimes, daysPerWeek, timeZone, reminderMethod } = req.body;
       const userId = req.userId;
 
       const profile = await UserProfile.findOneAndUpdate(
-        { userId },
+        { userId, sessionId },
         { 
           dailyTime, 
           bestLearningTimes, 
@@ -268,7 +297,7 @@ router.post(
         { upsert: true, new: true, setDefaultsOnInsert: true }
       );
 
-      return res.status(200).json({ message: 'Schedule and availability saved successfully', profile });
+      return res.status(200).json({ message: 'Schedule and availability saved successfully', profile, sessionId });
     } catch (err) {
       return next(err);
     }
@@ -279,6 +308,7 @@ router.post(
   '/step/5',
   requireAuth,
   [
+    body('sessionId').isString().trim().notEmpty().withMessage('Session ID is required'),
     body('primarySkillCategory').isString().trim().notEmpty().withMessage('Primary skill category is required'),
     body('skillsToLearn').isArray({ min: 1 }).withMessage('At least one skill to learn is required'),
     body('skillsToLearn.*').isString().trim().notEmpty().withMessage('Each skill must be a non-empty string'),
@@ -297,11 +327,11 @@ router.post(
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const { primarySkillCategory, skillsToLearn, currentSkillLevels, relatedSkills, prioritySkills } = req.body;
+      const { sessionId, primarySkillCategory, skillsToLearn, currentSkillLevels, relatedSkills, prioritySkills } = req.body;
       const userId = req.userId;
 
       const profile = await UserProfile.findOneAndUpdate(
-        { userId },
+        { userId, sessionId },
         { 
           primarySkillCategory, 
           skillsToLearn, 
@@ -313,7 +343,7 @@ router.post(
         { upsert: true, new: true, setDefaultsOnInsert: true }
       );
 
-      return res.status(200).json({ message: 'Skills assessment setup saved successfully', profile });
+      return res.status(200).json({ message: 'Skills assessment setup saved successfully', profile, sessionId });
     } catch (err) {
       return next(err);
     }
@@ -325,6 +355,7 @@ router.post(
   '/step/6',
   requireAuth,
   [
+    body('sessionId').isString().trim().notEmpty().withMessage('Session ID is required'),
     body('educationLevel').isIn(['High School', 'Bachelor\'s', 'Master\'s', 'PhD', 'Professional Certification', 'Self-taught']).withMessage('Valid education level is required'),
     body('certifications').optional().isArray(),
     body('certifications.*').optional().isString().trim(),
@@ -339,11 +370,11 @@ router.post(
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const { educationLevel, certifications, previousLearningExperience, teamRole, learningBudget } = req.body;
+      const { sessionId, educationLevel, certifications, previousLearningExperience, teamRole, learningBudget } = req.body;
       const userId = req.userId;
 
       const profile = await UserProfile.findOneAndUpdate(
-        { userId },
+        { userId, sessionId },
         { 
           educationLevel, 
           certifications, 
@@ -355,7 +386,7 @@ router.post(
         { upsert: true, new: true, setDefaultsOnInsert: true }
       );
 
-      return res.status(200).json({ message: 'Background and experience saved successfully', profile });
+      return res.status(200).json({ message: 'Background and experience saved successfully', profile, sessionId });
     } catch (err) {
       return next(err);
     }
@@ -367,6 +398,7 @@ router.post(
   '/step/7',
   requireAuth,
   [
+    body('sessionId').isString().trim().notEmpty().withMessage('Session ID is required'),
     body('successMeasurement').isIn(['Completion certificates', 'Skill assessments', 'Real projects', 'Portfolio building', 'Job placement']).withMessage('Valid success measurement is required'),
     body('progressTracking').isIn(['Detailed analytics', 'Simple progress bar', 'Milestone-based', 'Minimal tracking']).withMessage('Valid progress tracking preference is required'),
     body('communityParticipation').isIn(['Very active', 'Moderate participation', 'Occasional', 'Prefer solo learning']).withMessage('Valid community participation preference is required'),
@@ -382,11 +414,11 @@ router.post(
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const { successMeasurement, progressTracking, communityParticipation, accessibilityRequirements, communicationPreferences } = req.body;
+      const { sessionId, successMeasurement, progressTracking, communityParticipation, accessibilityRequirements, communicationPreferences } = req.body;
       const userId = req.userId;
 
       const profile = await UserProfile.findOneAndUpdate(
-        { userId },
+        { userId, sessionId },
         { 
           successMeasurement, 
           progressTracking, 
@@ -398,7 +430,7 @@ router.post(
         { upsert: true, new: true, setDefaultsOnInsert: true }
       );
 
-      return res.status(200).json({ message: 'Success metrics and preferences saved successfully', profile });
+      return res.status(200).json({ message: 'Success metrics and preferences saved successfully', profile, sessionId });
     } catch (err) {
       return next(err);
     }
@@ -410,6 +442,7 @@ router.post(
   '/step/8',
   requireAuth,
   [
+    body('sessionId').isString().trim().notEmpty().withMessage('Session ID is required'),
     body('skillAssessments').isArray({ min: 1 }).withMessage('Skill assessments are required'),
     body('skillAssessments.*.skill').isString().trim().notEmpty().withMessage('Skill name is required'),
     body('skillAssessments.*.confidenceLevel').isInt({ min: 1, max: 10 }).withMessage('Confidence level must be between 1 and 10'),
@@ -423,11 +456,11 @@ router.post(
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const { skillAssessments } = req.body;
+      const { sessionId, skillAssessments } = req.body;
       const userId = req.userId;
 
       const profile = await UserProfile.findOneAndUpdate(
-        { userId },
+        { userId, sessionId },
         { 
           skillAssessments,
           onboardingStep: 9
@@ -435,7 +468,7 @@ router.post(
         { upsert: true, new: true, setDefaultsOnInsert: true }
       );
 
-      return res.status(200).json({ message: 'Skill assessment saved successfully', profile });
+      return res.status(200).json({ message: 'Skill assessment saved successfully', profile, sessionId });
     } catch (err) {
       return next(err);
     }
@@ -447,6 +480,7 @@ router.post(
   '/step/9',
   requireAuth,
   [
+    body('sessionId').isString().trim().notEmpty().withMessage('Session ID is required'),
     body('profilePrivacy').isIn(['Public profile', 'Private', 'Visible to connections only']).withMessage('Valid profile privacy setting is required'),
     body('dataSharing.analytics').isBoolean().withMessage('Analytics data sharing preference is required'),
     body('dataSharing.marketing').isBoolean().withMessage('Marketing data sharing preference is required'),
@@ -464,11 +498,11 @@ router.post(
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const { profilePrivacy, dataSharing, notificationPreferences, themePreference, betaFeatures } = req.body;
+      const { sessionId, profilePrivacy, dataSharing, notificationPreferences, themePreference, betaFeatures } = req.body;
       const userId = req.userId;
 
       const profile = await UserProfile.findOneAndUpdate(
-        { userId },
+        { userId, sessionId },
         { 
           profilePrivacy, 
           dataSharing, 
@@ -481,7 +515,7 @@ router.post(
         { upsert: true, new: true, setDefaultsOnInsert: true }
       );
 
-      return res.status(200).json({ message: 'Final setup and preferences saved successfully', profile });
+      return res.status(200).json({ message: 'Final setup and preferences saved successfully', profile, sessionId });
     } catch (err) {
       return next(err);
     }
@@ -567,6 +601,7 @@ router.post(
   '/complete',
   requireAuth,
   [
+    body('sessionId').isString().trim().notEmpty().withMessage('Session ID is required'),
     body('skills').isArray().withMessage('Skills must be an array'),
     body('primarySkill').isString().withMessage('Primary skill is required'),
     body('level').isString().withMessage('Level is required'),
@@ -584,6 +619,7 @@ router.post(
       }
 
       const { 
+        sessionId,
         skills, 
         primarySkill, 
         level, 
@@ -595,7 +631,7 @@ router.post(
       const userId = req.userId;
 
       const profile = await UserProfile.findOneAndUpdate(
-        { userId },
+        { userId, sessionId },
         { 
           skill: primarySkill,
           level,
@@ -617,7 +653,8 @@ router.post(
 
       return res.status(200).json({ 
         message: 'Onboarding completed successfully', 
-        profile 
+        profile,
+        sessionId 
       });
     } catch (err) {
       console.error('Error completing onboarding:', err);

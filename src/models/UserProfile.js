@@ -2,7 +2,8 @@ const mongoose = require('mongoose');
 
 const userProfileSchema = new mongoose.Schema(
   {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true, index: true },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    sessionId: { type: String, required: true, default: () => new mongoose.Types.ObjectId().toString() },
     // Step 1: Welcome & Basic Profile
     fullName: { type: String, trim: true },
     email: { type: String, trim: true, lowercase: true },
@@ -100,6 +101,9 @@ const userProfileSchema = new mongoose.Schema(
   },
   { timestamps: true, versionKey: false }
 );
+
+// Create compound unique index for userId and sessionId
+userProfileSchema.index({ userId: 1, sessionId: 1 }, { unique: true });
 
 module.exports = mongoose.model('UserProfile', userProfileSchema);
 
