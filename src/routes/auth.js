@@ -39,13 +39,8 @@ router.post(
 
       const user = await User.create({ name, email, passwordHash });
 
-      // Create a corresponding UserProfile entry with sessionId
-      await UserProfile.create({
-        userId: user._id,
-        sessionId: new mongoose.Types.ObjectId().toString(),
-        fullName: name, // Initialize with name from signup
-        email: email, // Initialize with email from signup
-      });
+      // UserProfile will be created during onboarding flow
+      // No need to create it here to avoid validation issues
 
       const token = jwt.sign({ sub: user._id.toString(), email }, JWT_SECRET, {
         expiresIn: JWT_EXPIRES_IN,

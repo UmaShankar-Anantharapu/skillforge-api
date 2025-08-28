@@ -1,6 +1,8 @@
 const UserProfile = require('../models/UserProfile');
 const SkillMemoryBank = require('../models/SkillMemoryBank');
 const Roadmap = require('../models/Roadmap');
+const fs = require('fs');
+const path = require('path');
 const { chat, extractJSON } = require('./llmClient');
 const { generateComprehensiveRoadmap } = require('./researchAgentService');
 
@@ -17,9 +19,58 @@ Topics should be concise and practical. Concepts array lists 1-2 key ideas.
 `;
 }
 
-async function generateRoadmapWithLLM(userId, useResearchAgent = false) {
+function buildEnhancedPrompt(profile, bank) {
+  const weak = (bank?.concepts || [])
+    .filter((c) => c.strengthLevel < 50)
+    .map((c) => `${c.topic} (${c.strengthLevel})`)
+    .slice(0, 5);
+  
+  const profileDetails = {
+    skill: profile?.skill || 'General Programming',
+    level: profile?.level || 'beginner',
+    dailyTime: profile?.dailyTime || 30,
+    goal: profile?.goal || profile?.learningGoal || 'Improve skills',
+    occupation: profile?.occupation || 'Student',
+    experience: profile?.yearsOfExperience || 0,
+    interests: profile?.interests || [],
+    preferredLearningStyle: profile?.learningPreferences?.preferredStyle || 'mixed'
+  };
+
+  return `Generate complete JSON roadmap for ${profileDetails.skill} (${profileDetails.level} level, ${profileDetails.dailyTime} min/day).
+
+MUST include ALL 7 days. NO placeholders, NO "...", NO incomplete responses.
+
+{
+  "steps": [
+    {
+      "day": 1,
+      "topic": "Day 1 Topic",
+      "description": "Brief description",
+      "concepts": ["concept1", "concept2"],
+      "lessonIds": [],
+      "estimatedMinutes": ${profileDetails.dailyTime},
+      "difficulty": "${profileDetails.level}"
+    },
+    {
+      "day": 2,
+      "topic": "Day 2 Topic",
+      "description": "Brief description",
+      "concepts": ["concept3", "concept4"],
+      "lessonIds": [],
+      "estimatedMinutes": ${profileDetails.dailyTime},
+      "difficulty": "${profileDetails.level}"
+    }
+  ]
+}
+
+Generate complete JSON with days 1-7:`;
+}
+
+async function generateRoadmapWithLLM(userId, useResearchAgent = false, provider = 'ollama') {
   const profile = await UserProfile.findOne({ userId }).lean();
+  fs.appendFileSync('/Users/kmounika/Desktop/SkillForge/skillforge-api/roadmap_debug.log', `Debug: User Profile: ${JSON.stringify(profile)}\n`);
   const bank = await SkillMemoryBank.findOne({ userId }).lean();
+  fs.appendFileSync('/Users/kmounika/Desktop/SkillForge/skillforge-api/roadmap_debug.log', `Debug: Skill Memory Bank: ${JSON.stringify(bank)}\n`);
   
   if (useResearchAgent && profile?.skill) {
     try {
@@ -64,17 +115,28 @@ async function generateRoadmapWithLLM(userId, useResearchAgent = false) {
     }
   }
   
-  // Original LLM-only generation
-  const prompt = buildPrompt(profile, bank);
-  const reply = await chat([{ role: 'user', content: prompt }]);
+  // Enhanced LLM generation with profile-based customization
+  const prompt = buildEnhancedPrompt(profile, bank);
+  fs.appendFileSync('/Users/kmounika/Desktop/SkillForge/skillforge-api/roadmap_debug.log', `Debug: Sending prompt to LLM: ${prompt}\n`);
+  const reply = await chat([{ role: 'user', content: prompt }], provider);
+  fs.appendFileSync('/Users/kmounika/Desktop/SkillForge/skillforge-api/roadmap_debug.log', `Debug: LLM raw response: ${reply}\n`);
   const json = extractJSON(reply);
-  if (!json?.steps || !Array.isArray(json.steps)) throw new Error('LLM did not return steps');
-  // Normalize
+  fs.appendFileSync('/Users/kmounika/Desktop/SkillForge/skillforge-api/roadmap_debug.log', `Debug: Extracted JSON: ${JSON.stringify(json)}\n`);
+  if (!json?.steps || !Array.isArray(json.steps)) {
+    fs.appendFileSync('/Users/kmounika/Desktop/SkillForge/skillforge-api/roadmap_debug.log', `Error: Invalid LLM response structure: ${JSON.stringify(json)}\n`);
+    console.error('Invalid LLM response structure:', json);
+    throw new Error(`LLM did not return steps. Got: ${JSON.stringify(json)}`);
+  }
+  
+  // Normalize and enhance steps with profile data
   const steps = json.steps.slice(0, 7).map((s, i) => ({
     day: Number(s.day ?? i + 1),
     topic: String(s.topic ?? `Day ${i + 1}`),
     lessonIds: Array.isArray(s.lessonIds) ? s.lessonIds.map(String) : [],
     concepts: Array.isArray(s.concepts) ? s.concepts.map(String) : [],
+    description: s.description || '',
+    estimatedMinutes: s.estimatedMinutes || profile?.dailyTime || 30,
+    difficulty: s.difficulty || profile?.level || 'beginner'
   }));
 
   const roadmap = await Roadmap.findOneAndUpdate(
@@ -82,7 +144,9 @@ async function generateRoadmapWithLLM(userId, useResearchAgent = false) {
     { 
       steps,
       metadata: {
-        generatedWith: 'basic-llm',
+        generatedWith: `${provider}-llm`,
+        model: provider === 'ollama' ? 'phi3:mini' : 'openrouter',
+        profileBased: true,
         generatedAt: new Date()
       }
     },

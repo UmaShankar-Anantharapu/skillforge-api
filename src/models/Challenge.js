@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const challengeSchema = new mongoose.Schema(
   {
-    id: { type: String, required: true, unique: true, index: true },
+    id: { type: String, required: true, unique: true },
     title: { type: String, required: true },
     description: { type: String, required: true },
     points: { type: Number, default: 100 },

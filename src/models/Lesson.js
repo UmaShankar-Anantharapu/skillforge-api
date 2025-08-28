@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const lessonSchema = new mongoose.Schema(
   {
-    lessonId: { type: String, required: true, unique: true, index: true },
+    lessonId: { type: String, required: true, unique: true },
     type: { type: String, enum: ['text', 'quiz', 'code'], required: true },
     content: { type: mongoose.Schema.Types.Mixed, required: true },
     skill: { type: String, required: true, trim: true },

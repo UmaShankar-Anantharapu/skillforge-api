@@ -1,11 +1,11 @@
 // Ollama configuration
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://127.0.0.1:11434';
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.1';
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'phi3:mini';
 
 // OpenRouter configuration
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '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';
-const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-405b-instruct:free' || 'mistral-7b-instruct';
+// const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+// const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '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';
+// const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-405b-instruct:free' || 'mistral-7b-instruct';
 
 /**
  * Chat with either Ollama or OpenRouter based on configuration
@@ -13,7 +13,7 @@ const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-4
  * @param {string} provider - 'ollama' or 'openrouter'
  * @returns {Promise<string>} The response text
  */
-async function chat(messages, provider = 'openrouter') {
+async function chat(messages, provider = 'ollama') {
   if (provider === 'openrouter') {
     return chatWithOpenRouter(messages);
   }
@@ -27,14 +27,21 @@ async function chat(messages, provider = 'openrouter') {
  */
 async function chatWithOllama(messages) {
   try {
+    console.log('Ollama request:', { model: OLLAMA_MODEL, messages });
     const res = await fetch(`${OLLAMA_URL}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: OLLAMA_MODEL, messages, stream: false }),
     });
-    if (!res.ok) throw new Error(`Ollama chat error ${res.status}`);
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error('Ollama API error response:', errorText);
+      throw new Error(`Ollama chat error ${res.status}: ${errorText}`);
+    }
     const data = await res.json();
+    console.log('Ollama response data:', data);
     const text = data?.message?.content || data?.response || '';
+    console.log('Extracted text:', text);
     return text;
   } catch (error) {
     console.error('Ollama connection error:', error.message);
@@ -111,6 +118,11 @@ function extractJSON(text) {
       jsonContent = singleMatch[1].trim();
     }
   }
+  
+  // Clean up incomplete responses
+  jsonContent = jsonContent.replace(/snippet_end/g, '');
+  jsonContent = jsonContent.replace(/\.\.\. \(complete the sequence[^)]*\)/g, '');
+  jsonContent = jsonContent.replace(/\.\.\./g, '');
   
   // Try parsing with increasingly aggressive methods
   try {
