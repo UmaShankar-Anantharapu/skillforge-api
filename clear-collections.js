@@ -8,7 +8,7 @@ const Roadmap = require('./src/models/Roadmap');
 async function clearCollections() {
   try {
     // Connect to MongoDB
-    const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/skillforge';
+    const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/skillForge';
     console.log('Connecting to MongoDB:', mongoUri);
 
     await mongoose.connect(mongoUri, {

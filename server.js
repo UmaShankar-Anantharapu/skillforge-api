@@ -122,7 +122,7 @@ function loadRoutes() {
 
 
 const PORT = 5000;
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/skillforge';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/skillForge';
 
 async function startServer() {
   try {

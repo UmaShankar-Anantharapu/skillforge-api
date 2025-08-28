@@ -1,0 +1,1 @@
+{"user":{"id":"68b0557852a3c1eb5da6acfa","name":"Another User","email":"anotheruser@example.com"},"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2OGIwNTU3ODUyYTNjMWViNWRhNmFjZmEiLCJlbWFpbCI6ImFub3RoZXJ1c2VyQGV4YW1wbGUuY29tIiwiaWF0IjoxNzU2Mzg2NjgwLCJleHAiOjE3NTY5OTE0ODB9.b1P2IGYtVgvdSC07kNzFWoR2q8xiEgIiqCyN-R81zyk"}

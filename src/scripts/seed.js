@@ -9,7 +9,7 @@ const Lesson = require('../models/Lesson');
 const Challenge = require('../models/Challenge');
 const Leaderboard = require('../models/Leaderboard');
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/skillforge';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/skillForge';
 
 async function run() {
   try {

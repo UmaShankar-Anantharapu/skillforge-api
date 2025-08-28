@@ -6,7 +6,7 @@ services:
     ports:
       - "27017:27017"
     environment:
-      MONGO_INITDB_DATABASE: skillforge
+      MONGO_INITDB_DATABASE: skillForge
     volumes:
       - mongo-data:/data/db
     restart: unless-stopped

@@ -3,7 +3,7 @@ require('dotenv').config();
 
 async function dropDatabase() {
   try {
-    const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/skillforge';
+    const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/skillForge';
     console.log('Connecting to MongoDB:', mongoUri);
 
     await mongoose.connect(mongoUri, {
