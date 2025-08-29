@@ -3,9 +3,9 @@ const OLLAMA_URL = process.env.OLLAMA_URL || 'http://127.0.0.1:11434';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'phi3:mini';
 
 // OpenRouter configuration
-// const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-// const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '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';
-// const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-405b-instruct:free' || 'mistral-7b-instruct';
+const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'mistral-7b-instruct';
 
 /**
  * Chat with either Ollama or OpenRouter based on configuration
@@ -13,7 +13,7 @@ const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'phi3:mini';
  * @param {string} provider - 'ollama' or 'openrouter'
  * @returns {Promise<string>} The response text
  */
-async function chat(messages, provider = 'ollama') {
+async function chat(messages, provider = 'openrouter') {
   if (provider === 'openrouter') {
     return chatWithOpenRouter(messages);
   }
@@ -63,6 +63,13 @@ async function chatWithOpenRouter(messages) {
   }
 
   try {
+    const requestBody = {
+      model: OPENROUTER_MODEL,
+      messages,
+      temperature: 0.7,
+      max_tokens: 1000
+    };
+    console.log('OpenRouter Request Body:', JSON.stringify(requestBody, null, 2));
     const res = await fetch(OPENROUTER_API_URL, {
       method: 'POST',
       headers: {
@@ -71,12 +78,7 @@ async function chatWithOpenRouter(messages) {
         'HTTP-Referer': process.env.APP_URL || 'http://localhost:3000', // Required for OpenRouter
         'X-Title': 'SkillForge' // Optional - your app's name
       },
-      body: JSON.stringify({
-        model: OPENROUTER_MODEL,
-        messages,
-        temperature: 0.7,
-        max_tokens: 1000
-      })
+      body: JSON.stringify(requestBody)
     });
 
     if (!res.ok) {
@@ -98,8 +100,18 @@ async function chatWithOpenRouter(messages) {
  * @return {object|null} - The parsed JSON object or null if parsing fails
  */
 function extractJSON(text) {
-  if (!text) return null;
-  
+  try {
+    const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/);
+    if (jsonMatch && jsonMatch[1]) {
+      return JSON.parse(jsonMatch[1]);
+    }
+    return JSON.parse(text);
+  } catch (e) {
+    console.error('Failed to parse JSON:', e);
+    return null;
+  }
+}
+
   // Enable for verbose debugging
   const debug = false;
   

@@ -1,6 +1,13 @@
 global.File = class File {}
 
-require('dotenv').config();
+const path = require('path');
+const dotenv = require('dotenv');
+
+const envPath = process.env.NODE_ENV === 'production' 
+  ? path.resolve(__dirname, '.env.production') 
+  : path.resolve(__dirname, '.env.development');
+
+dotenv.config({ path: envPath });
 
 const express = require('express');
 const cors = require('cors');
@@ -15,7 +22,7 @@ app.use(morgan('dev'));
 app.use(helmet());
 app.use(express.json());
 app.use(cors({
-  origin: ['http://localhost:4200', 'http://localhost:4201'],
+  origin: ['http://localhost:4200', 'http://localhost:4201', 'https://umashankar-anantharapu.github.io'],
   credentials: true,
 }));
 
@@ -122,7 +129,7 @@ function loadRoutes() {
 
 
 const PORT = 5000;
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/skillForge';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/skillforge';
 
 async function startServer() {
   try {
