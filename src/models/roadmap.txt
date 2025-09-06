@@ -1,0 +1,305 @@
+{
+  "skill": "{{SKILL_NAME}}",
+  "description": "{{SKILL_DESCRIPTION}}",
+  "version": "1.0",
+  "lastUpdated": "{{CURRENT_DATE}}",
+  "difficulty": "{{OVERALL_DIFFICULTY}}",
+  
+  "metadata": {
+    "category": "{{CATEGORY}}", 
+    "tags": ["{{TAG1}}", "{{TAG2}}", "{{TAG3}}"],
+    "industry": "{{INDUSTRY}}",
+    "trending": true
+  },
+
+  "timeline": {
+    "estimated": "{{ESTIMATED_TIME}}",
+    "flexible": true,
+    "selfPaced": true,
+    "intensity": {
+      "casual": "{{CASUAL_TIMELINE}}",
+      "moderate": "{{MODERATE_TIMELINE}}", 
+      "intensive": "{{INTENSIVE_TIMELINE}}"
+    }
+  },
+
+  "prerequisites": {
+    "required": [
+      {
+        "skill": "{{REQUIRED_SKILL}}",
+        "level": "{{SKILL_LEVEL}}",
+        "timeToComplete": "{{TIME_ESTIMATE}}",
+        "alternatives": ["{{ALT1}}", "{{ALT2}}"]
+      }
+    ],
+    "recommended": [
+      {
+        "skill": "{{RECOMMENDED_SKILL}}",
+        "level": "{{SKILL_LEVEL}}",
+        "reason": "{{WHY_RECOMMENDED}}"
+      }
+    ]
+  },
+
+  "learningObjectives": [
+    "{{OBJECTIVE_1}}",
+    "{{OBJECTIVE_2}}",
+    "{{OBJECTIVE_3}}"
+  ],
+
+  "skillsYouWillGain": [
+    "{{SKILL_1}}",
+    "{{SKILL_2}}",
+    "{{SKILL_3}}"
+  ],
+
+  "careerPaths": [
+    {
+      "title": "{{JOB_TITLE}}",
+      "averageSalary": "{{SALARY_RANGE}}",
+      "jobGrowth": "{{GROWTH_PERCENTAGE}}",
+      "companies": ["{{COMPANY_1}}", "{{COMPANY_2}}", "{{COMPANY_3}}"]
+    }
+  ],
+
+  "levels": [
+    {
+      "level": "{{LEVEL_NAME}}",
+      "order": 1,
+      "duration": "{{LEVEL_DURATION}}",
+      "difficulty": "{{LEVEL_DIFFICULTY}}",
+      "overview": "{{LEVEL_OVERVIEW}}",
+      
+      "learningObjectives": [
+        "{{LEVEL_OBJECTIVE_1}}",
+        "{{LEVEL_OBJECTIVE_2}}"
+      ],
+
+      "completionCriteria": {
+        "minimumScore": 80,
+        "requiredProjects": 2,
+        "timeSpent": "{{MIN_HOURS}}+ hours",
+        "skillChecks": ["{{SKILL_CHECK_1}}", "{{SKILL_CHECK_2}}"]
+      },
+
+      "gamification": {
+        "xpReward": 500,
+        "badges": ["{{BADGE_1}}", "{{BADGE_2}}"],
+        "achievements": ["{{ACHIEVEMENT_1}}", "{{ACHIEVEMENT_2}}"],
+        "leaderboard": false
+      },
+
+      "topics": [
+        {
+          "title": "{{TOPIC_TITLE}}",
+          "order": 1,
+          "estimatedHours": 25,
+          "difficulty": "{{TOPIC_DIFFICULTY}}",
+          "description": "{{TOPIC_DESCRIPTION}}",
+          
+          "learningObjectives": [
+            "{{TOPIC_OBJECTIVE_1}}",
+            "{{TOPIC_OBJECTIVE_2}}"
+          ],
+
+          "keyTerms": ["{{TERM_1}}", "{{TERM_2}}", "{{TERM_3}}"],
+
+          "resources": [
+            {
+              "type": "course",
+              "name": "{{RESOURCE_NAME}}",
+              "link": "{{RESOURCE_URL}}",
+              "duration": "{{DURATION}}",
+              "rating": 4.5,
+              "difficulty": "{{RESOURCE_DIFFICULTY}}",
+              "free": true,
+              "certificate": true,
+              "provider": "{{PROVIDER}}"
+            },
+            {
+              "type": "book",
+              "name": "{{BOOK_NAME}}",
+              "author": "{{AUTHOR}}",
+              "pages": 300,
+              "rating": 4.3,
+              "free": false
+            },
+            {
+              "type": "practice",
+              "name": "{{PRACTICE_PLATFORM}}",
+              "link": "{{PLATFORM_URL}}",
+              "problems": "{{NUMBER_OF_PROBLEMS}}",
+              "difficulty": "{{DIFFICULTY_RANGE}}",
+              "free": true
+            }
+          ],
+
+          "assessments": [
+            {
+              "type": "quiz",
+              "name": "{{QUIZ_NAME}}",
+              "questions": 20,
+              "timeLimit": 45,
+              "passingScore": 80,
+              "attempts": 3
+            },
+            {
+              "type": "coding",
+              "name": "{{CODING_CHALLENGE}}",
+              "problems": 5,
+              "timeLimit": 120,
+              "autoGraded": true
+            }
+          ],
+
+          "project": {
+            "title": "{{PROJECT_TITLE}}",
+            "description": "{{PROJECT_DESCRIPTION}}",
+            "requirements": [
+              "{{REQUIREMENT_1}}",
+              "{{REQUIREMENT_2}}",
+              "{{REQUIREMENT_3}}"
+            ],
+            "deliverables": ["{{DELIVERABLE_1}}", "{{DELIVERABLE_2}}"],
+            "estimatedHours": 12,
+            "difficulty": "{{PROJECT_DIFFICULTY}}",
+            "rubric": {
+              "codeQuality": 25,
+              "functionality": 30,
+              "documentation": 20,
+              "creativity": 15,
+              "presentation": 10
+            },
+            "bonusChallenges": ["{{BONUS_1}}", "{{BONUS_2}}"]
+          },
+
+          "practiceExercises": [
+            {
+              "title": "{{EXERCISE_TITLE}}",
+              "difficulty": "Easy",
+              "timeEstimate": 30,
+              "description": "{{EXERCISE_DESCRIPTION}}"
+            }
+          ],
+
+          "commonMistakes": [
+            "{{MISTAKE_1}}",
+            "{{MISTAKE_2}}"
+          ],
+
+          "tips": [
+            "{{TIP_1}}",
+            "{{TIP_2}}"
+          ]
+        }
+      ],
+
+      "milestones": [
+        {
+          "name": "{{MILESTONE_NAME}}",
+          "description": "{{MILESTONE_DESCRIPTION}}",
+          "criteria": ["{{CRITERIA_1}}", "{{CRITERIA_2}}"]
+        }
+      ],
+
+      "capstoneProject": {
+        "title": "{{CAPSTONE_TITLE}}",
+        "description": "{{CAPSTONE_DESCRIPTION}}",
+        "duration": "{{CAPSTONE_DURATION}}",
+        "difficulty": "{{CAPSTONE_DIFFICULTY}}",
+        "requirements": ["{{REQ_1}}", "{{REQ_2}}"],
+        "businessContext": "{{BUSINESS_CONTEXT}}",
+        "deliverables": ["{{DELIVERABLE_1}}", "{{DELIVERABLE_2}}"],
+        "evaluationCriteria": {
+          "technicalExecution": 40,
+          "businessInsight": 30,
+          "presentation": 20,
+          "creativity": 10
+        }
+      },
+
+      "troubleshooting": {
+        "commonIssues": [
+          {
+            "issue": "{{ISSUE_DESCRIPTION}}",
+            "solution": "{{SOLUTION_DESCRIPTION}}",
+            "resources": ["{{HELP_RESOURCE_1}}", "{{HELP_RESOURCE_2}}"]
+          }
+        ],
+        "gettingUnstuck": [
+          "{{HELP_TIP_1}}",
+          "{{HELP_TIP_2}}"
+        ]
+      }
+    }
+  ],
+
+  "communities": [
+    {
+      "name": "{{COMMUNITY_NAME}}",
+      "link": "{{COMMUNITY_URL}}",
+      "type": "forum",
+      "active": true,
+      "description": "{{COMMUNITY_DESCRIPTION}}"
+    }
+  ],
+
+  "tools": [
+    {
+      "name": "{{TOOL_NAME}}",
+      "category": "{{TOOL_CATEGORY}}",
+      "free": true,
+      "description": "{{TOOL_DESCRIPTION}}",
+      "link": "{{TOOL_URL}}"
+    }
+  ],
+
+  "certifications": [
+    {
+      "name": "{{CERT_NAME}}",
+      "provider": "{{CERT_PROVIDER}}",
+      "cost": "{{CERT_COST}}",
+      "duration": "{{CERT_DURATION}}",
+      "recognition": "Industry standard",
+      "link": "{{CERT_URL}}"
+    }
+  ],
+
+  "portfolioGuidance": {
+    "projectTypes": ["{{PROJECT_TYPE_1}}", "{{PROJECT_TYPE_2}}"],
+    "showcaseItems": ["{{SHOWCASE_ITEM_1}}", "{{SHOWCASE_ITEM_2}}"],
+    "presentationTips": ["{{TIP_1}}", "{{TIP_2}}"],
+    "platforms": ["GitHub", "Portfolio Website", "LinkedIn"]
+  },
+
+  "nextSteps": {
+    "advancedTopics": ["{{ADVANCED_TOPIC_1}}", "{{ADVANCED_TOPIC_2}}"],
+    "relatedSkills": ["{{RELATED_SKILL_1}}", "{{RELATED_SKILL_2}}"],
+    "continuousLearning": ["{{LEARNING_TIP_1}}", "{{LEARNING_TIP_2}}"]
+  },
+
+  "successMetrics": {
+    "knowledgeAssessments": {
+      "passingScore": 80,
+      "retakePolicy": "Unlimited attempts with 24-hour cooldown"
+    },
+    "projectRequirements": {
+      "minimumQuality": "Professional standard",
+      "peerReview": true,
+      "industryRelevance": true
+    },
+    "timeTracking": {
+      "expectedHours": "{{TOTAL_EXPECTED_HOURS}}",
+      "milestoneCheckins": "Weekly",
+      "progressReports": "Bi-weekly"
+    }
+  },
+
+  "adaptiveFeatures": {
+    "personalizedPacing": true,
+    "difficultyAdjustment": true,
+    "alternativeResources": true,
+    "mentorshipProgram": false,
+    "studyGroups": true
+  }
+}

@@ -1,122 +1,743 @@
 const express = require('express');
-const { body, validationResult } = require('express-validator');
+const { body, validationResult, query } = require('express-validator');
+const axios = require('axios');
 const requireAuth = require('../middleware/requireAuth');
 const UserProfile = require('../models/UserProfile');
 const { generateSkillSuggestions } = require('../services/skillSuggestionService');
-const { generatePersonalizedRoadmaps, generateTrendingRoadmaps } = require('../services/aiRecommendationService');
+const { generateRoadmapWithLLM } = require('../services/roadmapLlmService');
+const { extractJSON } = require('../services/llmClient');
+
 
 const router = express.Router();
 
-console.log('Skills router initialized');
+// Placeholder for generateTrendingRoadmaps - to be properly implemented or imported
+require('dotenv').config();
+const ollamaBaseUrl = process.env.OLLAMA_URL || 'http://127.0.0.1:11434';
+const ollamaModel = 'phi3:mini';
 
-// Test endpoint to verify route is working
-router.get('/test', (req, res) => {
-  console.log('SKILLS /test endpoint hit!');
-  res.json({ message: 'Skills route is working!', timestamp: new Date().toISOString() });
-});
+async function generatePersonalizedRoadmaps(userId, userSkills = [], userGoals = []) {
+  console.log('Generating personalized roadmaps with Ollama for user:', userId);
 
-
-
-// New test endpoint to verify route ordering
-router.get('/new-test', (req, res) => {
-  console.log('NEW TEST ENDPOINT HIT!');
-  res.json({ message: 'New test endpoint working!', timestamp: new Date().toISOString() });
-});
-
-// Simple working test
-router.get('/simple-working-test', (req, res) => {
-  console.log('SIMPLE WORKING TEST HIT!');
-  res.json({ success: true, message: 'Simple working test' });
-});
-
-
-
-// Trending roadmaps endpoint
-router.get('/trending-roadmaps', async (req, res) => {
   try {
-    const { page = 1, limit = 6 } = req.query;
-    const skip = (page - 1) * limit;
-
-    // Generate trending roadmaps using LLM
-    const result = await generateTrendingRoadmaps();
+    const skillsContext = userSkills.length > 0 ? `Current skills: ${userSkills.join(', ')}` : 'No current skills specified';
+    const goalsContext = userGoals.length > 0 ? `Career goals: ${userGoals.join(', ')}` : 'General career advancement';
     
-    if (!result.success) {
-      throw new Error('Failed to generate trending roadmaps');
+    const prompt = `Generate 3 personalized technology roadmaps based on the user's profile. ${skillsContext}. ${goalsContext}. Each roadmap should include a title, a brief description (1-2 sentences), and 3-5 key skills or topics. Format the output as a JSON array of objects, like this: 
+    [
+      {
+        "title": "AI/ML Engineer Roadmap",
+        "description": "Master artificial intelligence and machine learning technologies.",
+        "skills": ["Python", "TensorFlow", "PyTorch", "Data Science", "Statistics"]
+      },
+      {
+        "title": "Cloud DevOps Engineer",
+        "description": "Learn cloud infrastructure and DevOps practices.",
+        "skills": ["AWS", "Docker", "Kubernetes", "CI/CD", "Terraform"]
+      }
+    ]
+    Focus on roadmaps that build upon the user's existing skills and align with their career goals. Include diverse technology areas and progressive skill development paths.
+    `;
+
+    const response = await axios.post(`${ollamaBaseUrl}/api/generate`, {
+      model: ollamaModel,
+      prompt: prompt,
+      stream: false,
+      options: {
+        temperature: 0.7,
+        top_p: 0.9
+      }
+    });
+
+    const generatedText = response.data.response;
+    console.log('Raw Ollama response for personalized roadmaps:', generatedText.substring(0, 500) + '...');
+
+    // Extract JSON from the response
+    const roadmapsData = extractJSON(generatedText);
+    
+    if (!roadmapsData || !Array.isArray(roadmapsData)) {
+      console.error('Invalid roadmaps data structure:', roadmapsData);
+      return { success: false, data: { roadmaps: [] }, error: 'Invalid data structure' };
+    }
+
+    // Validate and clean the roadmaps data
+    const validRoadmaps = roadmapsData.filter(roadmap => 
+      roadmap.title && 
+      roadmap.description && 
+      roadmap.skills && 
+      Array.isArray(roadmap.skills) && 
+      roadmap.skills.length > 0
+    ).map((roadmap, index) => ({
+      id: `personalized-${userId}-${index + 1}`,
+      title: roadmap.title,
+      description: roadmap.description,
+      skills: roadmap.skills,
+      estimatedDuration: roadmap.estimatedDuration || '4-6 months',
+      difficulty: roadmap.difficulty || 'Intermediate',
+      matchScore: Math.floor(Math.random() * 30) + 70 // 70-99% match score
+    }));
+
+    console.log(`Generated ${validRoadmaps.length} valid personalized roadmaps`);
+
+    return { success: true, data: { roadmaps: validRoadmaps } };
+  } catch (error) {
+    console.error('Error generating personalized roadmaps with Ollama:', error.message);
+    if (error.code === 'ECONNREFUSED') {
+      console.error('Connection to Ollama refused. Is the Ollama server running at', ollamaBaseUrl, '?');
+    } else if (error.response) {
+      console.error('Ollama API responded with an error:', error.response.status, error.response.data);
+    }
+    return { success: false, data: { roadmaps: [] }, error: error.message };
+  }
+}
+
+async function generateTrendingRoadmaps() {
+
+  try {
+    const prompt = `Generate a list of 3 trending technology roadmaps. Each roadmap should include a title, a brief description (1-2 sentences), and 3-5 key skills or topics. Format the output as a JSON array of objects, like this: 
+    [
+      {
+        "title": "Roadmap Title 1",
+        "description": "Description 1",
+        "skills": ["Skill A", "Skill B", "Skill C"]
+      },
+      {
+        "title": "Roadmap Title 2",
+        "description": "Description 2",
+        "skills": ["Skill X", "Skill Y", "Skill Z"]
+      }
+    ]
+    Focus on current trending technologies like AI/ML, Cloud Computing, DevOps, Web3, Cybersecurity, Mobile Development, Data Science, etc. Include diverse technology areas to provide comprehensive coverage.
+    `;
+
+    const response = await axios.post(`${ollamaBaseUrl}/api/generate`, {
+      model: ollamaModel,
+      prompt: prompt,
+      stream: false,
+      options: {
+        timeout: 30000 // 30 second timeout
+      }
+    });
+
+    const generatedContent = response.data.response;
+
+
+    // Use the improved extractJSON function from llmClient
+    const roadmaps = extractJSON(generatedContent);
+    
+    if (!roadmaps || !Array.isArray(roadmaps) || roadmaps.length === 0) {
+      console.error('Failed to extract valid roadmaps array from Ollama response');
+      return { success: false, data: { roadmaps: [] }, error: 'Failed to parse LLM response' };
     }
     
-    const allRoadmaps = result.data.roadmaps;
+    // Validate that each roadmap has the required properties
+    const validRoadmaps = roadmaps.filter(item => 
+      typeof item === 'object' && 
+      item !== null && 
+      'title' in item && 
+      'description' in item && 
+      'skills' in item
+    );
     
-    // Apply pagination
-    const paginatedRoadmaps = allRoadmaps.slice(skip, skip + parseInt(limit));
+    if (validRoadmaps.length === 0) {
+      console.error('No valid roadmaps found after filtering');
+      return { success: false, data: { roadmaps: [] }, error: 'No valid roadmaps in response' };
+    }
     
-    const totalCount = allRoadmaps.length;
-    const totalPages = Math.ceil(totalCount / limit);
+
+
+    return { success: true, data: { roadmaps: validRoadmaps } };
+  } catch (error) {
+    console.error('Error generating trending roadmaps with Ollama:', error.message);
+    if (error.code === 'ECONNREFUSED') {
+      console.error('Connection to Ollama refused. Is the Ollama server running at', ollamaBaseUrl, '?');
+    } else if (error.response) {
+      console.error('Ollama API responded with an error:', error.response.status, error.response.data);
+    }
+    return { success: false, data: { roadmaps: [] }, error: error.message };
+  }
+}
+
+
+
+
+
+
+
+
+
+// Trending roadmaps endpoint - simplified version with fallback
+router.get('/trending-roadmaps', async (req, res) => {
+  
+  try {
+    // Extract pagination parameters from query
+    const page = parseInt(req.query.page) || 0;
+    const pageSize = parseInt(req.query.pageSize) || 25;
+    const startIndex = page * pageSize;
+    const endIndex = startIndex + pageSize;
+    
+    // First try the generateTrendingRoadmaps function
+    const result = await generateTrendingRoadmaps();
+    
+    if (result.success && result.data.roadmaps && result.data.roadmaps.length > 0) {
+      // Apply pagination to the results
+      const paginatedRoadmaps = result.data.roadmaps.slice(startIndex, endIndex);
+      
+      res.json({
+        success: true,
+        data: paginatedRoadmaps,
+        count: paginatedRoadmaps.length,
+        totalCount: result.data.roadmaps.length,
+        page: page,
+        pageSize: pageSize,
+        totalPages: Math.ceil(result.data.roadmaps.length / pageSize),
+        message: 'Successfully retrieved trending roadmaps'
+      });
+    } else {
+
+      // Fallback to hardcoded roadmaps if Ollama fails
+      const allFallbackRoadmaps = [
+        {
+          id: 'web-dev-2024',
+          title: 'Full Stack Web Development 2024',
+          description: 'Complete roadmap for modern web development including frontend, backend, and deployment.',
+          skills: ['JavaScript', 'React', 'Node.js', 'MongoDB', 'Docker'],
+          estimatedDuration: '6-8 months',
+          difficulty: 'Intermediate'
+        },
+        {
+          id: 'ai-ml-roadmap',
+          title: 'AI & Machine Learning Engineer',
+          description: 'Comprehensive path to becoming an AI/ML engineer with practical projects.',
+          skills: ['Python', 'TensorFlow', 'PyTorch', 'Statistics', 'Deep Learning'],
+          estimatedDuration: '8-12 months',
+          difficulty: 'Advanced'
+        },
+        {
+          id: 'devops-2024',
+          title: 'DevOps Engineer Roadmap',
+          description: 'Master DevOps practices, tools, and cloud technologies.',
+          skills: ['Docker', 'Kubernetes', 'AWS', 'CI/CD', 'Terraform'],
+          estimatedDuration: '4-6 months',
+          difficulty: 'Intermediate'
+        },
+        {
+          id: 'mobile-dev-2024',
+          title: 'Mobile App Development',
+          description: 'Build cross-platform mobile applications using modern frameworks.',
+          skills: ['React Native', 'Flutter', 'Swift', 'Kotlin', 'Firebase'],
+          estimatedDuration: '5-7 months',
+          difficulty: 'Intermediate'
+        },
+        {
+          id: 'data-science-2024',
+          title: 'Data Science & Analytics',
+          description: 'Master data analysis, visualization, and machine learning techniques.',
+          skills: ['Python', 'R', 'SQL', 'Pandas', 'Matplotlib'],
+          estimatedDuration: '6-9 months',
+          difficulty: 'Intermediate'
+        },
+        {
+          id: 'cybersecurity-2024',
+          title: 'Cybersecurity Specialist',
+          description: 'Learn ethical hacking, security analysis, and threat detection.',
+          skills: ['Network Security', 'Penetration Testing', 'CISSP', 'Wireshark', 'Kali Linux'],
+          estimatedDuration: '7-10 months',
+          difficulty: 'Advanced'
+        },
+        {
+          id: 'cloud-architect-2024',
+          title: 'Cloud Solutions Architect',
+          description: 'Design and implement scalable cloud infrastructure solutions.',
+          skills: ['AWS', 'Azure', 'GCP', 'Terraform', 'CloudFormation'],
+          estimatedDuration: '6-8 months',
+          difficulty: 'Advanced'
+        },
+        {
+          id: 'blockchain-2024',
+          title: 'Blockchain Developer',
+          description: 'Build decentralized applications and smart contracts.',
+          skills: ['Solidity', 'Web3.js', 'Ethereum', 'Smart Contracts', 'DeFi'],
+          estimatedDuration: '5-8 months',
+          difficulty: 'Advanced'
+        },
+        {
+          id: 'ui-ux-2024',
+          title: 'UI/UX Designer',
+          description: 'Create user-centered designs and intuitive interfaces.',
+          skills: ['Figma', 'Adobe XD', 'User Research', 'Prototyping', 'Design Systems'],
+          estimatedDuration: '4-6 months',
+          difficulty: 'Intermediate'
+        },
+        {
+          id: 'game-dev-2024',
+          title: 'Game Development',
+          description: 'Create engaging games using modern game engines and frameworks.',
+          skills: ['Unity', 'Unreal Engine', 'C#', 'C++', 'Game Design'],
+          estimatedDuration: '8-12 months',
+          difficulty: 'Advanced'
+        },
+        {
+          id: 'backend-api-2024',
+          title: 'Backend API Development',
+          description: 'Build robust and scalable backend services and APIs.',
+          skills: ['Node.js', 'Express', 'PostgreSQL', 'Redis', 'GraphQL'],
+          estimatedDuration: '4-6 months',
+          difficulty: 'Intermediate'
+        },
+        {
+          id: 'frontend-react-2024',
+          title: 'Frontend React Specialist',
+          description: 'Master modern React development with advanced patterns.',
+          skills: ['React', 'TypeScript', 'Next.js', 'Redux', 'Testing Library'],
+          estimatedDuration: '4-5 months',
+          difficulty: 'Intermediate'
+        },
+        {
+          id: 'python-automation-2024',
+          title: 'Python Automation Engineer',
+          description: 'Automate workflows and build efficient Python applications.',
+          skills: ['Python', 'Selenium', 'Pandas', 'FastAPI', 'Pytest'],
+          estimatedDuration: '3-5 months',
+          difficulty: 'Beginner'
+        },
+        {
+          id: 'database-admin-2024',
+          title: 'Database Administrator',
+          description: 'Manage and optimize database systems for performance and reliability.',
+          skills: ['PostgreSQL', 'MySQL', 'MongoDB', 'Database Design', 'Performance Tuning'],
+          estimatedDuration: '5-7 months',
+          difficulty: 'Intermediate'
+        },
+        {
+          id: 'microservices-2024',
+          title: 'Microservices Architecture',
+          description: 'Design and implement distributed microservices systems.',
+          skills: ['Docker', 'Kubernetes', 'API Gateway', 'Service Mesh', 'Event Sourcing'],
+          estimatedDuration: '6-8 months',
+          difficulty: 'Advanced'
+        },
+        {
+          id: 'iot-developer-2024',
+          title: 'IoT Developer',
+          description: 'Build connected devices and IoT solutions.',
+          skills: ['Arduino', 'Raspberry Pi', 'MQTT', 'Edge Computing', 'Sensor Integration'],
+          estimatedDuration: '5-7 months',
+          difficulty: 'Intermediate'
+        },
+        {
+          id: 'qa-automation-2024',
+          title: 'QA Automation Engineer',
+          description: 'Implement automated testing strategies and frameworks.',
+          skills: ['Selenium', 'Cypress', 'Jest', 'API Testing', 'CI/CD Testing'],
+          estimatedDuration: '4-6 months',
+          difficulty: 'Intermediate'
+        },
+        {
+          id: 'product-manager-2024',
+          title: 'Technical Product Manager',
+          description: 'Bridge technology and business to deliver successful products.',
+          skills: ['Product Strategy', 'Agile', 'Data Analysis', 'User Research', 'Roadmapping'],
+          estimatedDuration: '3-5 months',
+          difficulty: 'Beginner'
+        },
+        {
+          id: 'ar-vr-2024',
+          title: 'AR/VR Developer',
+          description: 'Create immersive augmented and virtual reality experiences.',
+          skills: ['Unity', 'ARKit', 'ARCore', '3D Modeling', 'Spatial Computing'],
+          estimatedDuration: '7-10 months',
+          difficulty: 'Advanced'
+        },
+        {
+          id: 'site-reliability-2024',
+          title: 'Site Reliability Engineer',
+          description: 'Ensure system reliability, scalability, and performance.',
+          skills: ['Monitoring', 'Incident Response', 'Automation', 'Linux', 'Observability'],
+          estimatedDuration: '6-8 months',
+          difficulty: 'Advanced'
+        },
+        {
+          id: 'content-creator-2024',
+          title: 'Technical Content Creator',
+          description: 'Create engaging technical content and educational materials.',
+          skills: ['Technical Writing', 'Video Production', 'SEO', 'Social Media', 'Community Building'],
+          estimatedDuration: '3-4 months',
+          difficulty: 'Beginner'
+        },
+        {
+          id: 'salesforce-2024',
+          title: 'Salesforce Developer',
+          description: 'Build custom solutions on the Salesforce platform.',
+          skills: ['Apex', 'Lightning Components', 'SOQL', 'Salesforce Admin', 'Integration'],
+          estimatedDuration: '4-6 months',
+          difficulty: 'Intermediate'
+        },
+        {
+          id: 'low-code-2024',
+          title: 'Low-Code/No-Code Developer',
+          description: 'Build applications using visual development platforms.',
+          skills: ['Power Platform', 'Bubble', 'Zapier', 'Airtable', 'Workflow Automation'],
+          estimatedDuration: '2-4 months',
+          difficulty: 'Beginner'
+        },
+        {
+          id: 'edge-computing-2024',
+          title: 'Edge Computing Specialist',
+          description: 'Develop solutions for distributed edge computing environments.',
+          skills: ['Edge AI', 'CDN', 'Distributed Systems', 'Real-time Processing', '5G'],
+          estimatedDuration: '6-9 months',
+          difficulty: 'Advanced'
+        },
+        {
+          id: 'quantum-computing-2024',
+          title: 'Quantum Computing Developer',
+          description: 'Explore quantum algorithms and quantum software development.',
+          skills: ['Qiskit', 'Quantum Algorithms', 'Linear Algebra', 'Python', 'Quantum Physics'],
+          estimatedDuration: '9-12 months',
+          difficulty: 'Advanced'
+        }
+      ];
+      
+      // Apply pagination to fallback roadmaps
+      const paginatedFallbackRoadmaps = allFallbackRoadmaps.slice(startIndex, endIndex);
+      
+      res.json({
+        success: true,
+        data: paginatedFallbackRoadmaps,
+        count: paginatedFallbackRoadmaps.length,
+        totalCount: allFallbackRoadmaps.length,
+        page: page,
+        pageSize: pageSize,
+        totalPages: Math.ceil(allFallbackRoadmaps.length / pageSize),
+        message: 'Successfully retrieved trending roadmaps (fallback)'
+      });
+    }
+  } catch (error) {
+    console.error('Error in trending roadmaps endpoint:', error);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    
+    // Final fallback - return minimal data
+    const minimalRoadmaps = [
+      {
+        id: 'basic-web',
+        title: 'Basic Web Development',
+        description: 'Start your web development journey.',
+        skills: ['HTML', 'CSS', 'JavaScript'],
+        estimatedDuration: '2-3 months',
+        difficulty: 'Beginner'
+      }
+    ];
     
     res.json({
       success: true,
-      data: paginatedRoadmaps,
-      pagination: {
-        currentPage: parseInt(page),
-        totalPages,
-        totalCount,
-        hasNext: page < totalPages,
-        hasPrev: page > 1
-      }
-    });
-  } catch (error) {
-    console.error('Error fetching trending roadmaps:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: 'Failed to fetch trending roadmaps' 
+      data: minimalRoadmaps,
+      count: minimalRoadmaps.length,
+      message: 'Retrieved basic roadmaps (error fallback)'
     });
   }
 });
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // Personalized roadmaps endpoint
 router.get('/personalized-roadmaps', async (req, res) => {
   try {
-    const { userId, page = 1, limit = 6 } = req.query;
-    
+    const { userId, skills, goals, page, pageSize } = req.query;
+
     if (!userId) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'userId parameter is required' 
+      return res.status(400).json({ error: 'userId is required' });
+    }
+    
+    // Extract pagination parameters
+    const pageNum = parseInt(page) || 0;
+    const pageSizeNum = parseInt(pageSize) || 25;
+    const startIndex = pageNum * pageSizeNum;
+    const endIndex = startIndex + pageSizeNum;
+    
+    // Parse skills and goals from query parameters
+    const userSkills = skills ? skills.split(',').map(skill => skill.trim()) : [];
+    const userGoals = goals ? goals.split(',').map(goal => goal.trim()) : [];
+    
+    // Try to generate personalized roadmaps using Ollama
+    const result = await generatePersonalizedRoadmaps(userId, userSkills, userGoals);
+    
+    if (result.success && result.data.roadmaps && result.data.roadmaps.length > 0) {
+      // Apply pagination to the results
+      const paginatedRoadmaps = result.data.roadmaps.slice(startIndex, endIndex);
+      
+      res.json({
+        success: true,
+        data: paginatedRoadmaps,
+        count: paginatedRoadmaps.length,
+        totalCount: result.data.roadmaps.length,
+        page: pageNum,
+        pageSize: pageSizeNum,
+        totalPages: Math.ceil(result.data.roadmaps.length / pageSizeNum),
+        message: 'Successfully retrieved personalized roadmaps'
+      });
+    } else {
+      // Fallback to mock data if Ollama fails
+       const mockRoadmaps = [
+         {
+           id: 'ai-ml-roadmap',
+           title: 'AI & Machine Learning Mastery',
+           description: 'Complete roadmap to become proficient in AI and ML technologies',
+           skills: ['Python', 'TensorFlow', 'PyTorch', 'Data Science'],
+           estimatedDuration: '6 months',
+           difficulty: 'Advanced',
+           matchScore: 85
+         },
+         {
+           id: 'fullstack-dev',
+           title: 'Full Stack Development',
+           description: 'End-to-end web development with modern technologies',
+           skills: ['React', 'Node.js', 'MongoDB', 'Express'],
+           estimatedDuration: '4 months',
+           difficulty: 'Intermediate',
+           matchScore: 78
+         },
+         {
+           id: 'cloud-architect',
+           title: 'Cloud Architecture',
+           description: 'Design and implement scalable cloud solutions',
+           skills: ['AWS', 'Docker', 'Kubernetes', 'Microservices'],
+           estimatedDuration: '5 months',
+           difficulty: 'Advanced',
+           matchScore: 82
+         },
+         {
+           id: 'mobile-dev-roadmap',
+           title: 'Mobile App Development',
+           description: 'Build native and cross-platform mobile applications',
+           skills: ['React Native', 'Flutter', 'Swift', 'Kotlin'],
+           estimatedDuration: '5 months',
+           difficulty: 'Intermediate',
+           matchScore: 75
+         },
+         {
+           id: 'cybersecurity-roadmap',
+           title: 'Cybersecurity Specialist',
+           description: 'Protect systems and networks from digital attacks',
+           skills: ['Network Security', 'Penetration Testing', 'CISSP', 'Ethical Hacking'],
+           estimatedDuration: '8 months',
+           difficulty: 'Advanced',
+           matchScore: 88
+         },
+         {
+           id: 'data-science-roadmap',
+           title: 'Data Science & Analytics',
+           description: 'Extract insights from complex datasets',
+           skills: ['Python', 'R', 'SQL', 'Tableau', 'Statistics'],
+           estimatedDuration: '6 months',
+           difficulty: 'Intermediate',
+           matchScore: 80
+         },
+         {
+           id: 'blockchain-roadmap',
+           title: 'Blockchain Development',
+           description: 'Build decentralized applications and smart contracts',
+           skills: ['Solidity', 'Web3.js', 'Ethereum', 'Smart Contracts'],
+           estimatedDuration: '7 months',
+           difficulty: 'Advanced',
+           matchScore: 72
+         },
+         {
+           id: 'devops-roadmap',
+           title: 'DevOps Engineering',
+           description: 'Streamline development and deployment processes',
+           skills: ['Jenkins', 'Docker', 'Kubernetes', 'Terraform', 'CI/CD'],
+           estimatedDuration: '5 months',
+           difficulty: 'Intermediate',
+           matchScore: 83
+         },
+         {
+           id: 'ui-ux-roadmap',
+           title: 'UI/UX Design',
+           description: 'Create intuitive and engaging user experiences',
+           skills: ['Figma', 'Adobe XD', 'User Research', 'Prototyping'],
+           estimatedDuration: '4 months',
+           difficulty: 'Beginner',
+           matchScore: 76
+         },
+         {
+           id: 'backend-roadmap',
+           title: 'Backend Development',
+           description: 'Build robust server-side applications and APIs',
+           skills: ['Node.js', 'Express', 'MongoDB', 'PostgreSQL', 'REST APIs'],
+           estimatedDuration: '5 months',
+           difficulty: 'Intermediate',
+           matchScore: 79
+         },
+         {
+           id: 'game-dev-roadmap',
+           title: 'Game Development',
+           description: 'Create engaging games for multiple platforms',
+           skills: ['Unity', 'C#', 'Unreal Engine', 'Game Design'],
+           estimatedDuration: '6 months',
+           difficulty: 'Intermediate',
+           matchScore: 74
+         },
+         {
+           id: 'qa-automation-roadmap',
+           title: 'QA Automation Engineer',
+           description: 'Automate testing processes for software quality',
+           skills: ['Selenium', 'TestNG', 'Cypress', 'API Testing'],
+           estimatedDuration: '4 months',
+           difficulty: 'Intermediate',
+           matchScore: 77
+         },
+         {
+           id: 'product-manager-roadmap',
+           title: 'Product Management',
+           description: 'Lead product strategy and development lifecycle',
+           skills: ['Product Strategy', 'Agile', 'User Stories', 'Analytics'],
+           estimatedDuration: '3 months',
+           difficulty: 'Beginner',
+           matchScore: 81
+         },
+         {
+           id: 'digital-marketing-roadmap',
+           title: 'Digital Marketing',
+           description: 'Master online marketing strategies and tools',
+           skills: ['SEO', 'Google Ads', 'Social Media', 'Content Marketing'],
+           estimatedDuration: '3 months',
+           difficulty: 'Beginner',
+           matchScore: 73
+         },
+         {
+           id: 'system-admin-roadmap',
+           title: 'System Administration',
+           description: 'Manage and maintain IT infrastructure',
+           skills: ['Linux', 'Windows Server', 'Networking', 'Bash Scripting'],
+           estimatedDuration: '5 months',
+           difficulty: 'Intermediate',
+           matchScore: 78
+         },
+         {
+           id: 'embedded-systems-roadmap',
+           title: 'Embedded Systems',
+           description: 'Develop software for embedded hardware devices',
+           skills: ['C/C++', 'Arduino', 'Raspberry Pi', 'Microcontrollers'],
+           estimatedDuration: '6 months',
+           difficulty: 'Advanced',
+           matchScore: 84
+         },
+         {
+           id: 'salesforce-roadmap',
+           title: 'Salesforce Development',
+           description: 'Build custom solutions on the Salesforce platform',
+           skills: ['Apex', 'Lightning', 'SOQL', 'Salesforce Admin'],
+           estimatedDuration: '4 months',
+           difficulty: 'Intermediate',
+           matchScore: 76
+         },
+         {
+           id: 'business-analyst-roadmap',
+           title: 'Business Analysis',
+           description: 'Bridge business needs with technical solutions',
+           skills: ['Requirements Analysis', 'Process Modeling', 'SQL', 'Tableau'],
+           estimatedDuration: '3 months',
+           difficulty: 'Beginner',
+           matchScore: 75
+         },
+         {
+           id: 'network-engineer-roadmap',
+           title: 'Network Engineering',
+           description: 'Design and maintain network infrastructure',
+           skills: ['CCNA', 'TCP/IP', 'Routing', 'Switching', 'Network Security'],
+           estimatedDuration: '6 months',
+           difficulty: 'Intermediate',
+           matchScore: 82
+         },
+         {
+           id: 'database-admin-roadmap',
+           title: 'Database Administration',
+           description: 'Manage and optimize database systems',
+           skills: ['MySQL', 'PostgreSQL', 'Oracle', 'Database Tuning'],
+           estimatedDuration: '5 months',
+           difficulty: 'Intermediate',
+           matchScore: 80
+         },
+         {
+           id: 'frontend-specialist-roadmap',
+           title: 'Frontend Specialist',
+           description: 'Master modern frontend technologies and frameworks',
+           skills: ['React', 'Vue.js', 'TypeScript', 'Webpack', 'CSS3'],
+           estimatedDuration: '4 months',
+           difficulty: 'Intermediate',
+           matchScore: 77
+         },
+         {
+           id: 'python-automation-roadmap',
+           title: 'Python Automation Engineer',
+           description: 'Automate tasks and processes using Python',
+           skills: ['Python', 'Selenium', 'APIs', 'Scripting', 'Task Automation'],
+           estimatedDuration: '4 months',
+           difficulty: 'Beginner',
+           matchScore: 79
+         },
+         {
+           id: 'microservices-roadmap',
+           title: 'Microservices Architecture',
+           description: 'Design and implement microservices-based systems',
+           skills: ['Docker', 'Kubernetes', 'API Gateway', 'Service Mesh'],
+           estimatedDuration: '6 months',
+           difficulty: 'Advanced',
+           matchScore: 85
+         },
+         {
+           id: 'machine-learning-ops-roadmap',
+           title: 'MLOps Engineer',
+           description: 'Deploy and manage machine learning models in production',
+           skills: ['MLflow', 'Kubeflow', 'Docker', 'Model Deployment'],
+           estimatedDuration: '5 months',
+           difficulty: 'Advanced',
+           matchScore: 86
+         },
+         {
+           id: 'technical-writing-roadmap',
+           title: 'Technical Writing',
+           description: 'Create clear documentation and technical content',
+           skills: ['Documentation', 'Markdown', 'API Docs', 'Content Strategy'],
+           estimatedDuration: '3 months',
+           difficulty: 'Beginner',
+           matchScore: 71
+         }
+       ];
+      
+      // Apply pagination to mock roadmaps
+      const paginatedMockRoadmaps = mockRoadmaps.slice(startIndex, endIndex);
+      
+      res.json({
+        success: true,
+        data: paginatedMockRoadmaps,
+        count: paginatedMockRoadmaps.length,
+        totalCount: mockRoadmaps.length,
+        page: pageNum,
+        pageSize: pageSizeNum,
+        totalPages: Math.ceil(mockRoadmaps.length / pageSizeNum),
+        message: 'Retrieved personalized roadmaps (fallback)'
       });
     }
-    
-    const skip = (page - 1) * limit;
-
-    // Generate personalized roadmaps using LLM
-    const result = await generatePersonalizedRoadmaps(userId);
-    
-    if (!result.success) {
-      throw new Error('Failed to generate personalized roadmaps');
-    }
-    
-    const allRoadmaps = result.data.roadmaps;
-    
-    // Apply pagination
-    const paginatedRoadmaps = allRoadmaps.slice(skip, skip + parseInt(limit));
-    
-    const totalCount = allRoadmaps.length;
-    const totalPages = Math.ceil(totalCount / limit);
-    
-    res.json({
-      success: true,
-      data: paginatedRoadmaps,
-      pagination: {
-        currentPage: parseInt(page),
-        totalPages,
-        totalCount,
-        hasNext: page < totalPages,
-        hasPrev: page > 1
-      }
-    });
   } catch (error) {
-    console.error('Error fetching personalized roadmaps:', error);
+    console.error('Error in personalized-roadmaps:', error);
     res.status(500).json({ 
-      success: false, 
-      error: 'Failed to fetch personalized roadmaps' 
+      success: false,
+      error: 'Internal server error',
+      message: error.message 
     });
   }
 });
@@ -191,21 +812,51 @@ router.get('/relationships/:skillName', async (req, res, next) => {
 router.get('/trending', async (req, res, next) => {
   try {
     const trendingSkills = getTrendingSkills([]);
-    
     res.json({ skills: trendingSkills });
   } catch (error) {
-    console.error('Error getting trending skills:', error);
     next(error);
   }
 });
+
+// Skills search endpoint
+router.get('/search', async (req, res, next) => {
+  try {
+    const { q } = req.query;
+    
+    if (!q || q.trim().length === 0) {
+      return res.status(400).json({ error: 'Search query is required' });
+    }
+    
+    // Mock skills database - in production this would query a real database
+    const allSkills = [
+      'JavaScript', 'Python', 'Java', 'C++', 'React', 'Angular', 'Vue.js',
+      'Node.js', 'Express', 'Django', 'Flask', 'Spring Boot', 'MongoDB',
+      'PostgreSQL', 'MySQL', 'Redis', 'Docker', 'Kubernetes', 'AWS',
+      'Azure', 'Google Cloud', 'Machine Learning', 'Data Science',
+      'Artificial Intelligence', 'TensorFlow', 'PyTorch', 'Pandas',
+      'NumPy', 'Scikit-learn', 'HTML', 'CSS', 'SASS', 'TypeScript',
+      'GraphQL', 'REST API', 'Microservices', 'DevOps', 'CI/CD',
+      'Git', 'GitHub', 'GitLab', 'Agile', 'Scrum', 'Project Management'
+    ];
+    
+    const query = q.toLowerCase().trim();
+    const matchingSkills = allSkills.filter(skill => 
+      skill.toLowerCase().includes(query)
+    ).slice(0, 10); // Limit to 10 results
+    
+    res.json({ skills: matchingSkills });
+   } catch (error) {
+     next(error);
+   }
+ });
 
 // Generate AI-powered personalized roadmap recommendations
 router.get('/ai-recommendations/:userId', requireAuth, async (req, res, next) => {
   try {
     const { userId } = req.params;
-    console.log(`Generating AI recommendations for user: ${userId}`);
+
     
-    const result = await generatePersonalizedRoadmaps(userId);
+    const result = await generateRoadmapWithLLM(userId);
     res.json(result);
   } catch (error) {
     console.error('Error generating AI recommendations:', error);
@@ -638,5 +1289,8 @@ function getMarketDemand(role) {
   
   return demands[role] || 75;
 }
+
+
+
 
 module.exports = router;

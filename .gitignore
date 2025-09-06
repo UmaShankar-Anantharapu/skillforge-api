@@ -30,5 +30,4 @@ build/
 Thumbs.db
 
 # MongoDB data directory
-# Keep .mongo-data as it's specifically requested to be included
-# .mongo-data/
+.mongo-data/

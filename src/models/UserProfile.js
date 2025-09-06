@@ -80,6 +80,7 @@ const userProfileSchema = new mongoose.Schema(
     onboardingStep: { type: Number, default: 0 }, // 0-7
     onboardingComplete: { type: Boolean, default: false },
     roadmapGenerated: { type: Boolean, default: false },
+    lastGeneratedRoadmapId: { type: mongoose.Schema.Types.ObjectId, ref: 'Roadmap' },
 
     // Metadata
     createdAt: { type: Date, default: Date.now },

@@ -51,22 +51,61 @@ const roadmapStepSchema = new mongoose.Schema({
   order: { type: Number, required: true }
 }, { _id: false });
 
+// Phase schema for personalized roadmaps
+const phaseSchema = new mongoose.Schema({
+  phaseNumber: { type: Number, required: true },
+  title: { type: String, required: true, trim: true },
+  duration: { type: String, required: true }, // "2-3 weeks"
+  description: { type: String, trim: true },
+  milestones: [{
+    week: { type: Number, required: true },
+    title: { type: String, required: true, trim: true },
+    topics: [{ type: String, trim: true }],
+    concepts: [{ type: String, trim: true }],
+    estimatedHours: { type: Number, required: true },
+    difficulty: { type: String, enum: ['beginner', 'intermediate', 'advanced'], required: true },
+    resources: [resourceSchema],
+    completed: { type: Boolean, default: false },
+    completedAt: { type: Date }
+  }]
+}, { _id: false });
+
 // Main roadmap schema
 const roadmapSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   profileId: { type: mongoose.Schema.Types.ObjectId, ref: 'UserProfile', required: true },
 
   // Roadmap Metadata
   title: { type: String, required: true, trim: true },
+  roadmapTitle: { type: String, trim: true }, // For personalized roadmaps
   description: { type: String, trim: true },
   estimatedDuration: { type: String, required: true }, // "3 months", "6 months"
   difficultyLevel: { type: String, enum: ['Beginner', 'Intermediate', 'Advanced'], required: true },
   category: { type: String, trim: true }, // e.g., "Web Development", "Data Science"
   tags: [{ type: String, trim: true }],
 
-  // Roadmap Structure
+  // Legacy fields for backward compatibility
+  skill: { type: String, trim: true },
+  level: { type: String, trim: true },
+  goal: { type: String, trim: true },
+  dailyTime: { type: Number }, // in minutes
+
+  // Personalized roadmap fields
+  targetSkill: { type: String, trim: true },
+  learningPath: { type: String, enum: ['beginner', 'intermediate', 'advanced'], trim: true },
+  weeklyHours: { type: Number },
+  excludedSkills: [{ type: String, trim: true }],
+  focusAreas: [{ type: String, trim: true }],
+  prerequisites: [{ type: String, trim: true }],
+  skillGaps: [{ type: String, trim: true }],
+  personalizedNotes: { type: String, trim: true },
+  isPersonalized: { type: Boolean, default: false },
+  profileCompleteness: { type: Number, min: 0, max: 100 },
+
+  // Roadmap Structure (support both legacy and new formats)
   milestones: [milestoneSchema],
   steps: [roadmapStepSchema],
+  phases: [phaseSchema], // New personalized structure
 
   // AI Generation Metadata
   generationMetadata: {
@@ -101,14 +140,33 @@ const roadmapSchema = new mongoose.Schema({
 
   // Customization & Preferences
   isCustomized: { type: Boolean, default: false },
-  customizations: [{
-    stepId: { type: Number, required: true },
-    originalTitle: { type: String, trim: true },
-    customTitle: { type: String, trim: true },
-    originalDescription: { type: String, trim: true },
-    customDescription: { type: String, trim: true },
-    modifiedAt: { type: Date, default: Date.now }
-  }],
+  customizations: {
+    excludedSkillsCount: { type: Number, default: 0 },
+    focusAreasCount: { type: Number, default: 0 },
+    learningPath: { type: String, trim: true },
+    personalizedFor: { type: String, trim: true },
+    stepCustomizations: [{
+      stepId: { type: Number, required: true },
+      originalTitle: { type: String, trim: true },
+      customTitle: { type: String, trim: true },
+      originalDescription: { type: String, trim: true },
+      customDescription: { type: String, trim: true },
+      modifiedAt: { type: Date, default: Date.now }
+    }]
+  },
+
+  // Personalization metadata
+  metadata: {
+    generationMethod: { type: String, enum: ['basic', 'skill-exclusion', 'research-enhanced'], default: 'basic' },
+    profileVersion: { type: String, default: '1.0' },
+    excludedSkills: [{ type: String, trim: true }],
+    focusAreas: [{ type: String, trim: true }],
+    skillAnalysis: {
+      excludedSkillsCount: { type: Number, default: 0 },
+      focusAreasCount: { type: Number, default: 0 },
+      learningPath: { type: String, trim: true }
+    }
+  },
 
   // Status and Visibility
   status: {
@@ -322,15 +380,31 @@ roadmapSchema.methods.addFeedback = function(userId, rating, comment) {
   return this.save();
 };
 
-// Create indexes for efficient queries
-// userId index already created by unique: true in schema definition
-roadmapSchema.index({ status: 1 });
-roadmapSchema.index({ isPublic: 1 });
-roadmapSchema.index({ category: 1 });
-roadmapSchema.index({ difficultyLevel: 1 });
-roadmapSchema.index({ 'analytics.averageRating': -1 });
-roadmapSchema.index({ 'analytics.likeCount': -1 });
-roadmapSchema.index({ createdAt: -1 });
-roadmapSchema.index({ 'progress.percentageComplete': 1 });
+// Comprehensive indexes for performance optimization
+roadmapSchema.index({ userId: 1 }); // User-specific roadmaps
+roadmapSchema.index({ status: 1 }); // Status filtering
+roadmapSchema.index({ isPublic: 1 }); // Public roadmaps
+roadmapSchema.index({ category: 1 }); // Category filtering
+roadmapSchema.index({ difficultyLevel: 1 }); // Difficulty filtering
+roadmapSchema.index({ 'analytics.averageRating': -1 }); // Rating sorting
+roadmapSchema.index({ 'analytics.likeCount': -1 }); // Popularity sorting
+roadmapSchema.index({ 'analytics.viewCount': -1 }); // View count sorting
+roadmapSchema.index({ 'analytics.shareCount': -1 }); // Share count sorting
+roadmapSchema.index({ createdAt: -1 }); // Recent roadmaps
+roadmapSchema.index({ updatedAt: -1 }); // Recently updated
+roadmapSchema.index({ 'progress.percentageComplete': 1 }); // Progress tracking
+roadmapSchema.index({ 'progress.lastActivityAt': -1 }); // Recent activity
+roadmapSchema.index({ 'progress.currentStep': 1 }); // Current step queries
+roadmapSchema.index({ estimatedDuration: 1 }); // Duration filtering
+roadmapSchema.index({ tags: 1 }); // Tag-based searches
+roadmapSchema.index({ skill: 1 }); // Skill-based queries
+roadmapSchema.index({ targetSkill: 1 }); // Target skill filtering
+roadmapSchema.index({ isPersonalized: 1 }); // Personalized roadmaps
+roadmapSchema.index({ profileCompleteness: -1 }); // Profile completeness sorting
+// Compound indexes for complex queries
+roadmapSchema.index({ userId: 1, status: 1 }); // User's active roadmaps
+roadmapSchema.index({ category: 1, difficultyLevel: 1 }); // Category + difficulty
+roadmapSchema.index({ isPublic: 1, 'analytics.averageRating': -1 }); // Public + rating
+roadmapSchema.index({ status: 1, 'progress.lastActivityAt': -1 }); // Active + recent activity
 
 module.exports = mongoose.model('Roadmap', roadmapSchema);

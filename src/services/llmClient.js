@@ -100,25 +100,16 @@ async function chatWithOpenRouter(messages) {
  * @return {object|null} - The parsed JSON object or null if parsing fails
  */
 function extractJSON(text) {
-  try {
-    const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/);
-    if (jsonMatch && jsonMatch[1]) {
-      return JSON.parse(jsonMatch[1]);
-    }
-    return JSON.parse(text);
-  } catch (e) {
-    console.error('Failed to parse JSON:', e);
-    return null;
-  }
-}
-
   // Enable for verbose debugging
-  const debug = false;
+  const debug = true;
+  
+  if (debug) console.log('Original text:', text);
   
   // Extract content from code blocks if present
   let jsonContent = text;
   
   // Case 1: Extract from triple backticks (```json or just ```)
+  // This regex is more robust to leading/trailing text outside the code block
   const tripleMatch = text.match(/```(?:json)?([\s\S]*?)```/i);
   if (tripleMatch && tripleMatch[1]) {
     jsonContent = tripleMatch[1].trim();
@@ -131,64 +122,66 @@ function extractJSON(text) {
     }
   }
   
-  // Clean up incomplete responses
-  jsonContent = jsonContent.replace(/snippet_end/g, '');
-  jsonContent = jsonContent.replace(/\.\.\. \(complete the sequence[^)]*\)/g, '');
-  jsonContent = jsonContent.replace(/\.\.\./g, '');
+  if (debug) console.log('Debug: jsonContent before parsing attempts:', jsonContent);
   
   // Try parsing with increasingly aggressive methods
   try {
     // Method 1: Direct parse (for well-formed JSON)
     try {
-      return JSON.parse(jsonContent);
+      if (debug) console.log('Debug: Attempting JSON.parse on:', jsonContent);
+      const parsed = JSON.parse(jsonContent);
+      if (parsed && parsed.steps) {
+        return parsed;
+      }
     } catch (e) {
       if (debug) console.log('Direct parse failed:', e.message);
     }
     
-    // Method 2: Basic cleanup then parse
+    // Method 2: Fix common Ollama JSON issues
+    try {
+      const fixed = fixOllamaJSON(jsonContent);
+      const parsed = JSON.parse(fixed);
+      if (parsed && parsed.steps) {
+        return parsed;
+      }
+    } catch (e) {
+      if (debug) console.log('Ollama fix parse failed:', e.message);
+    }
+    
+    // Method 3: Basic cleanup then parse
     try {
       const cleaned = cleanupJSON(jsonContent);
-      return JSON.parse(cleaned);
+      const parsed = JSON.parse(cleaned);
+      if (parsed && parsed.steps) {
+        return parsed;
+      }
     } catch (e) {
       if (debug) console.log('Basic cleanup parse failed:', e.message);
     }
     
-    // Method 3: Deep cleanup then parse
+    // Method 4: Deep cleanup then parse
     try {
       const deepCleaned = deepCleanJSON(jsonContent);
-      return JSON.parse(deepCleaned);
+      const parsed = JSON.parse(deepCleaned);
+      if (parsed && parsed.steps) {
+        return parsed;
+      }
     } catch (e) {
       if (debug) console.log('Deep cleanup parse failed:', e.message);
     }
     
-    // Method 4: Try to extract JSON-like structure and parse
+    // Method 5: Try to extract JSON array pattern
     try {
-      // Look for anything that resembles a JSON object
-      const jsonPattern = /{[\s\S]*?}/;
-      const jsonMatch = text.match(jsonPattern);
-      if (jsonMatch) {
-        const extracted = deepCleanJSON(jsonMatch[0]);
-        return JSON.parse(extracted);
+      const arrayMatch = text.match(/\[[\s\S]*\]/);
+      if (arrayMatch) {
+        const fixed = fixOllamaJSON(arrayMatch[0]);
+        const parsed = JSON.parse(fixed);
+        if (parsed && parsed.steps) {
+          return parsed;
+        }
       }
     } catch (e) {
-      if (debug) console.log('Pattern extraction failed:', e.message);
-    }
-    
-    // Method 5: Last resort - try eval-based parsing (with safety checks)
-    try {
-      // Only attempt if the content looks like a safe object literal
-      if (/^\s*\{[\s\S]*\}\s*$/.test(jsonContent) && 
-          !/(function|eval|setTimeout|setInterval|new\s+Function)/.test(jsonContent)) {
-        // Convert to valid JSON first
-        const safeJson = jsonContent
-          .replace(/([{,]\s*)([a-zA-Z0-9_$]+)\s*:/g, '$1"$2":') // Quote unquoted keys
-          .replace(/(?<!\\)'/g, '"') // Replace single quotes with double quotes
-          .replace(/,\s*([}\]])/g, '$1'); // Remove trailing commas
-        
-        return JSON.parse(safeJson);
-      }
-    } catch (e) {
-      if (debug) console.log('Safe eval parse failed:', e.message);
+      if (debug) console.log('Array extraction failed:', e.message);
     }
     
     // All methods failed
@@ -197,6 +190,80 @@ function extractJSON(text) {
     console.warn('Failed to extract JSON:', error.message);
     return null;
   }
+}
+
+/**
+ * Fix specific JSON issues that Ollama commonly produces
+ */
+function fixOllamaJSON(jsonString) {
+  console.log('Debug: fixOllamaJSON received:', jsonString);
+  let fixed = jsonString;
+  
+  // Remove any leading/trailing text that's not part of JSON
+  fixed = fixed.replace(/^[^\[{]*/, '').replace(/[^\]}]*$/, '');
+  
+  // Remove comments within JSON (e.g., // comments or /* comments */)
+  fixed = fixed.replace(/\/\/.*|\/\*[^]*?\*\//g, '');
+
+  // Remove orphaned text fragments that break JSON structure
+  // This handles cases like "curve," appearing on its own line
+  fixed = fixed.replace(/^\s*[a-zA-Z]+\s*,?\s*$/gm, '');
+  
+  // Remove lines that contain only random text fragments
+  console.log('Debug: fixOllamaJSON returning:', fixed);
+  fixed = fixed.replace(/^\s*[a-zA-Z]+\s*,\s*$/gm, '');
+  
+  // Fix broken lines where text spills over
+  fixed = fixed.replace(/"\s*,\s*\n\s*[a-zA-Z]+\s*,?\s*\n/g, '",\n');
+  
+  // Fix unquoted string values (but preserve numbers and booleans)
+  fixed = fixed.replace(/:\s*([a-zA-Z][^,\]\}"]*?)\s*([,\]\}])/g, (match, value, ending) => {
+    // Don't quote if it's a boolean, null, or number
+    if (/^(true|false|null|\d+(\.\d+)?)$/.test(value.trim())) {
+      return `: ${value.trim()}${ending}`;
+    }
+    return `: "${value.trim()}"${ending}`;
+  });
+  
+  // Fix unquoted keys
+  fixed = fixed.replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/g, '$1"$2":');
+  
+  // Fix single quotes to double quotes
+  fixed = fixed.replace(/'/g, '"');
+  
+  // Remove trailing commas
+  fixed = fixed.replace(/,\s*([}\]])/g, '$1');
+  
+  // Fix missing commas between objects/arrays
+  fixed = fixed.replace(/}\s*{/g, '}, {');
+  fixed = fixed.replace(/]\s*\[/g, '], [');
+  
+  // Clean up multiple consecutive newlines and normalize whitespace
+  fixed = fixed.replace(/\n\s*\n/g, '\n').replace(/\s+/g, ' ').trim();
+  
+  return fixed;
+}
+
+function postProcessOllamaResponse(parsedData) {
+  if (!Array.isArray(parsedData)) {
+    return parsedData;
+  }
+
+  const processedResult = parsedData.map(item => {
+    const processedItem = {};
+
+    for (const [key, value] of Object.entries(item)) {
+      if (Array.isArray(value) && value.every(v => typeof v === 'string')) {
+        // Join string arrays back into single strings
+        processedItem[key] = value.join(' ');
+      } else {
+        processedItem[key] = value;
+      }
+    }
+
+    return processedItem;
+  });
+  return processedResult;
 }
 
 /**

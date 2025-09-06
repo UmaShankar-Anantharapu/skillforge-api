@@ -1,10 +1,74 @@
-const UserProfile = require('../models/UserProfile');
 const SkillMemoryBank = require('../models/SkillMemoryBank');
 const Roadmap = require('../models/Roadmap');
-const fs = require('fs');
-const path = require('path');
 const { chat, extractJSON } = require('./llmClient');
-const { generateComprehensiveRoadmap } = require('./researchAgentService');
+const UserProfile = require('../models/UserProfile');
+
+async function generateRoadmapWithLLM(userId, provider = 'ollama') {
+  console.log('generateRoadmapWithLLM: Function entered.');
+  try {
+    console.log('generateRoadmapWithLLM: Starting roadmap generation for userId:', userId);
+
+    console.log('generateRoadmapWithLLM: Attempting to find user profile for userId:', userId);
+    const userProfile = await UserProfile.findOne({ userId });
+    if (!userProfile) {
+      console.error('generateRoadmapWithLLM: User profile not found for userId:', userId);
+      throw new Error(`User profile not found for userId: ${userId}`);
+    }
+    console.log('generateRoadmapWithLLM: User profile found.');
+
+    console.log('generateRoadmapWithLLM: Attempting to find skill memory bank for userId:', userId);
+    const skillMemoryBank = await SkillMemoryBank.findOne({ userId });
+    console.log('generateRoadmapWithLLM: Skill memory bank found or not found (null if not found).');
+
+    const prompt = buildEnhancedPrompt(userProfile, skillMemoryBank);
+    console.log('generateRoadmapWithLLM: Prompt built.');
+
+    let llmResponse;
+    try {
+      llmResponse = await chat(prompt, provider);
+      console.log('generateRoadmapWithLLM: LLM chat response received.');
+    } catch (llmError) {
+      console.error('generateRoadmapWithLLM: LLM chat error:', llmError);
+      console.error('generateRoadmapWithLLM: LLM chat error stringified:', JSON.stringify(llmError));
+      throw new Error(`Failed to get response from LLM: ${llmError.message}`);
+    }
+
+    let roadmapData;
+    try {
+      roadmapData = extractJSON(llmResponse);
+      console.log('generateRoadmapWithLLM: JSON extracted from LLM response.');
+    } catch (jsonError) {
+      console.error('generateRoadmapWithLLM: JSON extraction error:', jsonError);
+      throw new Error(`Failed to parse roadmap JSON from LLM response: ${jsonError.message}`);
+    }
+
+    if (!roadmapData || !roadmapData.steps || !Array.isArray(roadmapData.steps)) {
+      console.error('generateRoadmapWithLLM: Invalid roadmap data structure received from LLM:', JSON.stringify(roadmapData));
+      throw new Error('Invalid roadmap data structure received from LLM.');
+    }
+    console.log('generateRoadmapWithLLM: Roadmap data structure validated.');
+
+    const roadmap = new Roadmap({
+      userId,
+      skill: userProfile.skill,
+      level: userProfile.level,
+      goal: userProfile.goal,
+      dailyTime: userProfile.dailyTime,
+      steps: roadmapData.steps,
+      generatedAt: new Date(),
+    });
+
+    console.log('generateRoadmapWithLLM: Attempting to save roadmap to DB.');
+    await roadmap.save();
+    console.log('generateRoadmapWithLLM: Roadmap saved to DB.');
+
+    return roadmap;
+  } catch (error) {
+    console.error('generateRoadmapWithLLM: Top-level error:', error);
+    console.error('generateRoadmapWithLLM: Top-level error stack:', error.stack);
+    throw error;
+  }
+}
 
 function buildPrompt(profile, bank) {
   const weak = (bank?.concepts || [])
@@ -63,98 +127,14 @@ MUST include ALL 7 days. NO placeholders, NO "...", NO incomplete responses.
   ]
 }
 
-Generate complete JSON with days 1-7:`;
+Generate complete JSON with days 1-7:`
 }
 
-async function generateRoadmapWithLLM(userId, useResearchAgent = false, provider = 'ollama') {
-  const profile = await UserProfile.findOne({ userId }).lean();
-  fs.appendFileSync('/Users/kmounika/Desktop/SkillForge/skillforge-api/roadmap_debug.log', `Debug: User Profile: ${JSON.stringify(profile)}\n`);
-  const bank = await SkillMemoryBank.findOne({ userId }).lean();
-  fs.appendFileSync('/Users/kmounika/Desktop/SkillForge/skillforge-api/roadmap_debug.log', `Debug: Skill Memory Bank: ${JSON.stringify(bank)}\n`);
-  
-  if (useResearchAgent && profile?.skill) {
-    try {
-      // Use research agent for enhanced roadmap generation
-      const comprehensiveRoadmap = await generateComprehensiveRoadmap(profile.skill, {
-        level: profile.level || 'beginner',
-        timeframe: '4-weeks',
-        dailyTimeMinutes: profile.dailyTime || 30,
-        focus: 'practical',
-        includeProjects: true
-      });
-      
-      // Convert comprehensive roadmap to our format
-      const steps = comprehensiveRoadmap.roadmap.steps?.slice(0, 7).map((s, i) => ({
-        day: Number(s.day ?? i + 1),
-        topic: String(s.title ?? s.topic ?? `Day ${i + 1}`),
-        lessonIds: [],
-        concepts: Array.isArray(s.concepts) ? s.concepts.map(String) : [],
-        description: s.description || '',
-        resources: s.resources || [],
-        type: s.type || 'theory',
-        duration: s.duration || '5 minutes'
-      })) || [];
 
-      const roadmap = await Roadmap.findOneAndUpdate(
-        { userId },
-        { 
-          steps,
-          metadata: {
-            generatedWith: 'research-agent',
-            sources: comprehensiveRoadmap.sources?.slice(0, 5) || [],
-            generatedAt: new Date()
-          }
-        },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
-      );
-      return roadmap;
-      
-    } catch (error) {
-      console.error('Research agent roadmap generation failed, falling back to basic LLM:', error.message);
-      // Fall back to basic LLM generation
-    }
-  }
-  
-  // Enhanced LLM generation with profile-based customization
-  const prompt = buildEnhancedPrompt(profile, bank);
-  fs.appendFileSync('/Users/kmounika/Desktop/SkillForge/skillforge-api/roadmap_debug.log', `Debug: Sending prompt to LLM: ${prompt}\n`);
-  const reply = await chat([{ role: 'user', content: prompt }], provider);
-  fs.appendFileSync('/Users/kmounika/Desktop/SkillForge/skillforge-api/roadmap_debug.log', `Debug: LLM raw response: ${reply}\n`);
-  const json = extractJSON(reply);
-  fs.appendFileSync('/Users/kmounika/Desktop/SkillForge/skillforge-api/roadmap_debug.log', `Debug: Extracted JSON: ${JSON.stringify(json)}\n`);
-  if (!json?.steps || !Array.isArray(json.steps)) {
-    fs.appendFileSync('/Users/kmounika/Desktop/SkillForge/skillforge-api/roadmap_debug.log', `Error: Invalid LLM response structure: ${JSON.stringify(json)}\n`);
-    console.error('Invalid LLM response structure:', json);
-    throw new Error(`LLM did not return steps. Got: ${JSON.stringify(json)}`);
-  }
-  
-  // Normalize and enhance steps with profile data
-  const steps = json.steps.slice(0, 7).map((s, i) => ({
-    day: Number(s.day ?? i + 1),
-    topic: String(s.topic ?? `Day ${i + 1}`),
-    lessonIds: Array.isArray(s.lessonIds) ? s.lessonIds.map(String) : [],
-    concepts: Array.isArray(s.concepts) ? s.concepts.map(String) : [],
-    description: s.description || '',
-    estimatedMinutes: s.estimatedMinutes || profile?.dailyTime || 30,
-    difficulty: s.difficulty || profile?.level || 'beginner'
-  }));
-
-  const roadmap = await Roadmap.findOneAndUpdate(
-    { userId },
-    { 
-      steps,
-      metadata: {
-        generatedWith: `${provider}-llm`,
-        model: provider === 'ollama' ? 'phi3:mini' : 'openrouter',
-        profileBased: true,
-        generatedAt: new Date()
-      }
-    },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
-  );
-  return roadmap;
-}
-
-module.exports = { generateRoadmapWithLLM };
+module.exports = {
+  generateRoadmapWithLLM,
+  buildPrompt,
+  buildEnhancedPrompt
+};
 
 
