@@ -190,11 +190,11 @@ const trendingRoadmapsSchema = new mongoose.Schema({
 });
 
 // Comprehensive indexes for performance optimization
-trendingRoadmapsSchema.index({ periodId: 1 }, { unique: true }); // Primary lookup
+// Note: periodId is already indexed as unique in the schema definition
 trendingRoadmapsSchema.index({ status: 1 }); // Status filtering
 trendingRoadmapsSchema.index({ periodStart: -1 }); // Recent periods first
 trendingRoadmapsSchema.index({ periodEnd: -1 }); // Period end sorting
-trendingRoadmapsSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 }); // TTL for automatic cleanup
+// Note: expiresAt is already indexed as TTL in the schema definition
 trendingRoadmapsSchema.index({ 'trendingRoadmaps.rank': 1 }); // Rank-based queries
 trendingRoadmapsSchema.index({ 'trendingRoadmaps.roadmapId': 1 }); // Roadmap lookup
 trendingRoadmapsSchema.index({ 'trendingRoadmaps.category': 1 }); // Category filtering

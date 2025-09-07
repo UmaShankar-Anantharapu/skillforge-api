@@ -31,7 +31,7 @@ app.use(morgan('dev'));
 app.use(helmet());
 app.use(express.json());
 app.use(cors({
-  origin: ['http://localhost:4200', 'http://localhost:4201', 'https://umashankar-anantharapu.github.io'],
+  origin: '*', // Allow all origins during development
   credentials: true,
 }));
 

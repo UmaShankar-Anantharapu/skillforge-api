@@ -196,7 +196,7 @@ userRoadmapTrackingSchema.index({ 'activeLearning.lastAccessedAt': -1 }); // Rec
 userRoadmapTrackingSchema.index({ 'savedRoadmaps.roadmapId': 1 }); // Saved roadmap lookup
 userRoadmapTrackingSchema.index({ 'savedRoadmaps.savedAt': -1 }); // Recent saves
 userRoadmapTrackingSchema.index({ 'savedRoadmaps.category': 1 }); // Category filtering
-userRoadmapTrackingSchema.index({ 'aiRecommendations.expiresAt': 1 }, { expireAfterSeconds: 0 }); // TTL for cleanup
+// Note: aiRecommendations.expiresAt is already indexed as TTL in the schema definition
 userRoadmapTrackingSchema.index({ 'aiRecommendations.suggestedDateTime': -1 }); // Recent recommendations
 userRoadmapTrackingSchema.index({ 'aiRecommendations.category': 1 }); // Category-based recommendations
 userRoadmapTrackingSchema.index({ 'aiRecommendations.difficultyLevel': 1 }); // Difficulty filtering
